@@ -1,0 +1,87 @@
+{
+  "title": "ĐĂNG KÝ LÊN VĂN PHÒNG",
+  "registrationLimit": {
+    "enabled": true,
+    "maxRegistrationsPerDay": 2,
+    "message": "Rất tiếc, số lượt đăng ký trong ngày hôm nay đã đạt giới hạn. Vui lòng thử lại vào ngày mai.",
+    "byFloor": true,
+    "floorLimits": [
+      {
+        "floorName": "Tầng 26",
+        "maxRegistrations": 1,
+        "enabled": true
+      },
+      {
+        "floorName": "Tầng 46",
+        "maxRegistrations": 1,
+        "enabled": true
+      }
+    ]
+  },
+  "fields": {
+    "name": {
+      "label": "Họ và tên",
+      "required": true,
+      "enabled": true
+    },
+    "phone": {
+      "label": "Số điện thoại",
+      "required": true,
+      "enabled": true
+    },
+    "email": {
+      "label": "Email",
+      "required": true,
+      "enabled": true
+    },
+    "school": {
+      "label": "Trường đại học",
+      "required": true,
+      "enabled": true,
+      "options": [
+        "Đại học Sư phạm Kỹ thuật TP.HCM"
+      ]
+    },
+    "studentId": {
+      "label": "Mã số sinh viên",
+      "required": false,
+      "enabled": true
+    },
+    "purpose": {
+      "label": "Chọn mục đích",
+      "required": true,
+      "enabled": true,
+      "options": [
+        "Học tập"
+      ]
+    },
+    "floor": {
+      "label": "Chọn tầng",
+      "required": true,
+      "enabled": true,
+      "options": [
+        "Tầng 26",
+        "Tầng 46"
+      ]
+    },
+    "contact": {
+      "label": "Chọn người liên hệ",
+      "required": true,
+      "enabled": true,
+      "options": [
+        "Lữ Thiện"
+      ]
+    },
+    "date": {
+      "label": "Ngày đăng ký",
+      "required": true,
+      "enabled": true
+    },
+    "time": {
+      "label": "Giờ đăng ký",
+      "required": true,
+      "enabled": true,
+      "defaultValue": "09:00"
+    }
+  }
+}

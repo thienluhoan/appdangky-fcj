@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Visit {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String
+  school      String
+  studentId   String?
+  date        String
+  purpose     String
+  department  String?
+  time        String?
+  contact     String?
+  note        String?
+  floor       String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  timestamp   String?
+
+  @@map("visits")
+}
+
+model FormConfig {
+  id                String   @id @default("default")
+  title             String   @default("Đăng ký lên văn phòng")
+  registrationLimit Json?
+  fields            Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("form_config")
+}
