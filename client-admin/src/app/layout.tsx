@@ -18,11 +18,48 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
   
   // Kiểm tra xem người dùng đã đăng nhập chưa (dựa vào cookie)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // Thông tin người dùng
+  const [userData, setUserData] = useState({ username: 'Admin', email: '' });
   
   useEffect(() => {
     // Kiểm tra cookie trong useEffect để tránh lỗi hydration
     const checkLoginStatus = () => {
-      setIsLoggedIn(document.cookie.includes('isLoggedIn=true'));
+      const isUserLoggedIn = document.cookie.includes('isLoggedIn=true');
+      setIsLoggedIn(isUserLoggedIn);
+      
+      // Nếu đã đăng nhập, lấy thông tin người dùng
+      if (isUserLoggedIn) {
+        fetchUserData();
+      }
+    };
+    
+    // Hàm lấy thông tin người dùng trực tiếp từ database
+    const fetchUserData = async () => {
+      try {
+        // Luôn gọi API để lấy thông tin mới nhất từ database
+        const response = await fetch('/api/me', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          // Thêm cache: 'no-store' để đảm bảo luôn lấy dữ liệu mới nhất
+          cache: 'no-store'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            // Cập nhật state với dữ liệu mới nhất từ database
+            setUserData({
+              username: data.user.username || 'Admin',
+              email: data.user.email || ''
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Lỗi khi lấy thông tin người dùng:', error);
+      }
     };
     
     // Kiểm tra ban đầu
@@ -219,6 +256,7 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
                         Form đăng ký
                       </Link>
                     </li>
+
                   </ul>
                 </nav>
               </div>
@@ -253,7 +291,7 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
                       </svg>
                     </div>
                     <div style={{ color: 'white' }}>
-                      <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Admin</div>
+                      <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{userData.username}</div>
                     </div>
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '5px' }}>
                       <polyline points="6 9 12 15 18 9"></polyline>
@@ -272,9 +310,37 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
                       zIndex: 10
                     }}>
                       <div style={{ padding: '15px', borderBottom: '1px solid #eee' }}>
-                        <div style={{ fontWeight: '600', color: '#333' }}>Admin</div>
-                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>Tài khoản quản trị viên</div>
+                        <div style={{ fontWeight: '600', color: '#333' }}>{userData.username}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>{userData.email}</div>
                       </div>
+                      
+                      <Link 
+                        href="/account" 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          padding: '12px 15px', 
+                          color: '#333', 
+                          textDecoration: 'none',
+                          transition: 'background-color 0.2s ease',
+                          borderBottom: '1px solid #eee'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 153, 0, 0.1)';
+                          e.currentTarget.style.color = '#FF9900';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = '#333';
+                        }}
+                        onClick={() => setShowDropdown(false)}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '10px' }}>
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Quản lý tài khoản
+                      </Link>
                       
                       <Link 
                         href="/login" 
@@ -299,11 +365,13 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
                           
                           // Xóa cookie đăng nhập
                           document.cookie = 'isLoggedIn=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                          document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                           localStorage.removeItem('adminLoggedIn');
                           
                           // Cập nhật trạng thái đăng nhập
                           setIsLoggedIn(false);
                           setShowDropdown(false);
+                          setUserData({ username: 'Admin', email: '' });
                           
                           // Chuyển hướng về trang đăng nhập
                           window.location.href = '/login';

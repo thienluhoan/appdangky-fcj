@@ -1,0 +1,167 @@
+/* CSS cho Modern Time Picker */
+.modern-time-picker {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  font-family: 'Roboto', 'Segoe UI', sans-serif;
+  align-items: center;
+}
+
+.time-picker-label {
+  text-align: center;
+  margin: 0;
+  padding: 10px 0;
+  font-weight: 600;
+  color: #1e2e3e;
+  font-size: 15px;
+}
+
+.time-picker-container {
+  display: flex;
+  align-items: center;
+  background-color: transparent;
+  width: fit-content;
+  position: relative;
+}
+
+/* Container cho từng trường (giờ, phút, AM/PM) */
+.time-field-container {
+  position: relative;
+  margin-right: 5px;
+}
+
+.time-field-container.period {
+  margin-left: 5px;
+}
+
+/* Style cho trường hiển thị */
+.time-field {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e2e3e;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  user-select: none;
+}
+
+.time-field-container.period .time-field {
+  width: 50px;
+  background-color: #1e2e3e;
+  color: white;
+}
+
+.time-field:hover {
+  background-color: #e8e8e8;
+}
+
+.time-field-container.period .time-field:hover {
+  background-color: #162536;
+}
+
+/* Dấu hai chấm giữa giờ và phút */
+.time-separator {
+  font-size: 20px;
+  font-weight: bold;
+  color: #1e2e3e;
+  margin: 0 5px;
+  user-select: none;
+}
+
+/* Dropdown cho các tùy chọn */
+.time-dropdown {
+  position: absolute;
+  top: 45px;
+  left: 0;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  width: 60px;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
+}
+
+.time-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.time-dropdown::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 3px;
+}
+
+.time-dropdown::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.period-dropdown {
+  width: 70px;
+}
+
+.time-dropdown-item {
+  padding: 8px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.time-dropdown-item:hover {
+  background-color: #f5f5f5;
+}
+
+.time-dropdown-item.active {
+  background-color: #1e2e3e;
+  color: white;
+  font-weight: 500;
+}
+
+/* Loại bỏ các mũi tên tăng/giảm trong input number */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Animation cho dropdown */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.time-dropdown {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Tùy chỉnh khoảng cách giữa các phần tử trong time group */
+.time-group {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.time-group > div {
+  flex: 1;
+}
+
+.time-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}

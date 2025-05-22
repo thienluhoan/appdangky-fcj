@@ -1,5 +1,7 @@
 {
+  "/page": "app/page.js",
+  "/account/page": "app/account/page.js",
   "/form/page": "app/form/page.js",
-  "/api/form-config/route": "app/api/form-config/route.js",
-  "/list/page": "app/list/page.js"
+  "/api/check-initial-setup/route": "app/api/check-initial-setup/route.js",
+  "/login/page": "app/login/page.js"
 }

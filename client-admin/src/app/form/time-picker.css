@@ -1,0 +1,118 @@
+/* CSS tùy chỉnh cho TimePicker */
+.react-time-picker {
+  display: inline-flex;
+  position: relative;
+  width: 100%;
+  max-width: 180px;
+}
+
+.react-time-picker__wrapper {
+  display: flex;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px 12px;
+  background-color: #fff;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.react-time-picker__wrapper:hover {
+  border-color: #1e2e3e;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.react-time-picker__wrapper:focus-within {
+  border-color: #1e2e3e;
+  box-shadow: 0 0 0 2px rgba(30, 46, 62, 0.2), 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.react-time-picker__inputGroup {
+  min-width: 80px;
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-time-picker__inputGroup__input {
+  min-width: 16px;
+  height: 100%;
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: center;
+  color: #1e2e3e;
+}
+
+.react-time-picker__inputGroup__input:focus {
+  outline: none;
+}
+
+.react-time-picker__inputGroup__divider {
+  padding: 0 4px;
+  color: #1e2e3e;
+  font-weight: bold;
+}
+
+.react-time-picker__inputGroup__hour,
+.react-time-picker__inputGroup__minute {
+  font-weight: 600;
+}
+
+/* Định dạng cho nút mũi tên tăng/giảm */
+.react-time-picker__button {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.react-time-picker__button:hover {
+  background-color: rgba(30, 46, 62, 0.1);
+}
+
+.react-time-picker__button:active {
+  background-color: rgba(30, 46, 62, 0.2);
+}
+
+.react-time-picker__button svg {
+  stroke: #1e2e3e;
+  stroke-width: 2px;
+  transition: all 0.2s ease;
+}
+
+.react-time-picker__button:hover svg {
+  stroke: #0a1624;
+}
+
+/* Đảm bảo độ rộng phù hợp với layout */
+.time-group .react-time-picker {
+  width: 100%;
+}
+
+/* Tùy chỉnh màu sắc cho phần chọn giờ */
+.react-time-picker__inputGroup__leadingZero {
+  color: #666;
+}
+
+/* Tùy chỉnh khoảng cách giữa các phần tử trong time group */
+.time-group {
+  gap: 40px;
+}
+
+.time-group > div {
+  flex: 1;
+}
+
+.time-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}

@@ -3,26 +3,203 @@
  */
 
 const nodemailer = require('nodemailer');
+const fs = require('fs').promises;
+const path = require('path');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+// Đường dẫn đến file cấu hình email
+const configFilePath = path.join(__dirname, './config/emailConfig.json');
+
+// Cấu hình mặc định
+let emailConfig = {
+  host: 'smtp.gmail.com',
+  port: '587',
+  secure: false,
+  email: '',
+  password: ''
+};
 
 // Cấu hình transporter cho Nodemailer
 let transporter = null;
 
 /**
- * Khởi tạo transporter cho Nodemailer
+ * Lấy cấu hình email của người dùng từ cơ sở dữ liệu
+ * @param {string} userId - ID của người dùng
+ * @returns {Promise<Object|null>} - Cấu hình email của người dùng hoặc null nếu không tìm thấy
+ */
+async function getUserEmailConfig(userId) {
+  try {
+    if (!userId) {
+      console.warn('Không có userId, sử dụng cấu hình mặc định');
+      return null;
+    }
+    
+    const userEmailConfig = await prisma.emailConfig.findUnique({
+      where: { userId }
+    });
+    
+    if (userEmailConfig) {
+      console.log(`Đã tìm thấy cấu hình email cho người dùng ${userId}`);
+      return userEmailConfig;
+    } else {
+      console.warn(`Không tìm thấy cấu hình email cho người dùng ${userId}`);
+      return null;
+    }
+  } catch (error) {
+    console.error('Lỗi khi lấy cấu hình email của người dùng:', error);
+    return null;
+  }
+}
+
+/**
+ * Đọc cấu hình email từ file (legacy, chỉ sử dụng khi không có cấu hình người dùng)
+ */
+async function loadEmailConfig() {
+  try {
+    const data = await fs.readFile(configFilePath, 'utf8');
+    const config = JSON.parse(data);
+    
+    if (config.email && config.password) {
+      emailConfig.email = config.email;
+      emailConfig.password = config.password;
+      console.log('Cấu hình email mặc định đã được tải thành công');
+    }
+  } catch (error) {
+    console.warn('Không thể tải cấu hình email, sử dụng cấu hình mặc định:', error.message);
+  }
+}
+
+// Tải cấu hình mặc định khi khởi động module
+loadEmailConfig().catch(err => console.error('Lỗi khi tải cấu hình email:', err));
+
+/**
+ * Cập nhật cấu hình email cho người dùng
+ * @param {string} userId - ID của người dùng
+ * @param {Object} config - Cấu hình email mới
+ * @returns {Promise<boolean>} - Kết quả cập nhật
+ */
+async function updateUserEmailConfig(userId, config) {
+  try {
+    if (!userId) {
+      console.error('Không có userId, không thể cập nhật cấu hình email');
+      return false;
+    }
+    
+    const { host, port, secure, email, password } = config;
+    
+    if (!email || !password) {
+      console.error('Thiếu thông tin email hoặc mật khẩu');
+      return false;
+    }
+    
+    // Kiểm tra xem người dùng đã có cấu hình email chưa
+    const existingConfig = await prisma.emailConfig.findUnique({
+      where: { userId }
+    });
+    
+    if (existingConfig) {
+      // Cập nhật cấu hình hiện có
+      await prisma.emailConfig.update({
+        where: { userId },
+        data: {
+          host: host || 'smtp.gmail.com',
+          port: port || '587',
+          secure: secure || false,
+          email,
+          password
+        }
+      });
+    } else {
+      // Tạo cấu hình mới
+      await prisma.emailConfig.create({
+        data: {
+          host: host || 'smtp.gmail.com',
+          port: port || '587',
+          secure: secure || false,
+          email,
+          password,
+          userId
+        }
+      });
+    }
+    
+    // Reset transporter để sử dụng cấu hình mới
+    transporter = null;
+    console.log(`Cấu hình email cho người dùng ${userId} đã được cập nhật`);
+    return true;
+  } catch (error) {
+    console.error('Lỗi khi cập nhật cấu hình email của người dùng:', error);
+    return false;
+  }
+}
+
+/**
+ * Cập nhật cấu hình email mặc định (legacy)
+ * @param {string} email - Địa chỉ email mới
+ * @param {string} password - Mật khẩu mới
+ */
+function updateConfig(email, password) {
+  if (email && password) {
+    emailConfig.email = email;
+    emailConfig.password = password;
+    
+    // Reset transporter để sử dụng cấu hình mới
+    transporter = null;
+    console.log('Cấu hình email mặc định đã được cập nhật');
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Khởi tạo transporter cho Nodemailer với cấu hình cụ thể
+ * @param {Object} config - Cấu hình email
+ * @returns {boolean} - Kết quả khởi tạo
+ */
+function initTransporterWithConfig(config) {
+  try {
+    if (!config || !config.email || !config.password) {
+      console.error('Cấu hình email không hợp lệ');
+      return false;
+    }
+    
+    // Sử dụng SMTP với cấu hình được cung cấp
+    transporter = nodemailer.createTransport({
+      host: config.host || 'smtp.gmail.com',
+      port: parseInt(config.port) || 587,
+      secure: config.secure || false,
+      auth: {
+        user: config.email,
+        pass: config.password
+      }
+    });
+    
+    console.log(`Nodemailer đã được khởi tạo thành công với email ${config.email}`);
+    return true;
+  } catch (error) {
+    console.error('Lỗi khi khởi tạo Nodemailer:', error);
+    return false;
+  }
+}
+
+/**
+ * Khởi tạo transporter cho Nodemailer với cấu hình mặc định
  * Sử dụng Gmail SMTP để gửi email
  */
 function initTransporter() {
   try {
-    // Sử dụng Gmail SMTP
+    // Sử dụng Gmail SMTP với cấu hình hiện tại
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'thienluhoan@gmail.com', // Email dùng để gửi
-        pass: 'dvyimlbvxmgtuezb' // Mật khẩu ứng dụng Google đã cung cấp
+        user: emailConfig.email,
+        pass: emailConfig.password
       }
     });
     
-    console.log('Nodemailer đã được khởi tạo thành công');
+    console.log('Nodemailer đã được khởi tạo thành công với cấu hình mặc định');
     return true;
   } catch (error) {
     console.error('Lỗi khi khởi tạo Nodemailer:', error);
@@ -34,20 +211,40 @@ function initTransporter() {
 const IGNORE_EMAIL_ERRORS = true;
 
 /**
- * Gửi email thông báo đã duyệt đăng ký
+ * Gửi email thông báo đã duyệt đăng ký sử dụng cấu hình email của người dùng
  * @param {Object} visit - Thông tin đăng ký đã được duyệt
+ * @param {string} userId - ID của người dùng thực hiện hành động
  * @returns {Promise<boolean>} - Kết quả gửi email
  */
-async function sendApprovalEmail(visit) {
+async function sendApprovalEmail(visit, userId) {
   // In ra toàn bộ đối tượng visit để kiểm tra
   console.log('Chi tiết đối tượng visit:', JSON.stringify(visit, null, 2));
   console.log('Thời gian:', visit.time);
   console.log('Tầng:', visit.floor);
+  console.log('Người dùng gửi email:', userId);
   
   try {
-    // Khởi tạo transporter nếu chưa có
+    let userConfig = null;
+    
+    // Lấy cấu hình email của người dùng nếu có userId
+    if (userId) {
+      userConfig = await getUserEmailConfig(userId);
+    }
+    
+    // Khởi tạo transporter với cấu hình của người dùng hoặc cấu hình mặc định
     if (!transporter) {
-      const initialized = initTransporter();
+      let initialized = false;
+      
+      if (userConfig) {
+        // Sử dụng cấu hình của người dùng
+        initialized = initTransporterWithConfig(userConfig);
+        console.log(`Sử dụng cấu hình email của người dùng ${userId}`);
+      } else {
+        // Sử dụng cấu hình mặc định
+        initialized = initTransporter();
+        console.log('Sử dụng cấu hình email mặc định');
+      }
+      
       if (!initialized) {
         console.error('Không thể khởi tạo Nodemailer để gửi email');
         return IGNORE_EMAIL_ERRORS;
@@ -67,15 +264,18 @@ async function sendApprovalEmail(visit) {
     
     console.log('Đang gửi email duyệt đến:', visit.email);
     
+    // Xác định địa chỉ email gửi
+    const senderEmail = userConfig ? userConfig.email : emailConfig.email;
+    
     // In thông tin email trước khi gửi
     console.log('Thông tin email sẽ gửi:');
-    console.log('- Người gửi: thienluhoan@gmail.com');
+    console.log('- Người gửi:', senderEmail);
     console.log('- Người nhận:', visit.email);
     console.log('- Tiêu đề: Đăng ký làm việc tại văn phòng AWS đã được duyệt');
     
     // Chuẩn bị nội dung email
     const mailOptions = {
-      from: '"First Cloud Journey Office" <thienluhoan@gmail.com>',
+      from: `"First Cloud Journey Office" <${senderEmail}>`,
       to: visit.email,
       subject: 'FCJ - Đăng ký làm việc tại văn phòng đã được duyệt',
       html: `
@@ -157,15 +357,38 @@ async function sendApprovalEmail(visit) {
 }
 
 /**
- * Gửi email thông báo từ chối đăng ký
+ * Gửi email thông báo từ chối đăng ký sử dụng cấu hình email của người dùng
  * @param {Object} visit - Thông tin đăng ký đã bị từ chối
+ * @param {string} userId - ID của người dùng thực hiện hành động
  * @returns {Promise<boolean>} - Kết quả gửi email
  */
-async function sendRejectionEmail(visit) {
+async function sendRejectionEmail(visit, userId) {
+  // In ra thông tin đăng ký và người dùng
+  console.log('Chi tiết đối tượng visit:', JSON.stringify(visit, null, 2));
+  console.log('Người dùng gửi email:', userId);
+  
   try {
-    // Khởi tạo transporter nếu chưa có
+    let userConfig = null;
+    
+    // Lấy cấu hình email của người dùng nếu có userId
+    if (userId) {
+      userConfig = await getUserEmailConfig(userId);
+    }
+    
+    // Khởi tạo transporter với cấu hình của người dùng hoặc cấu hình mặc định
     if (!transporter) {
-      const initialized = initTransporter();
+      let initialized = false;
+      
+      if (userConfig) {
+        // Sử dụng cấu hình của người dùng
+        initialized = initTransporterWithConfig(userConfig);
+        console.log(`Sử dụng cấu hình email của người dùng ${userId}`);
+      } else {
+        // Sử dụng cấu hình mặc định
+        initialized = initTransporter();
+        console.log('Sử dụng cấu hình email mặc định');
+      }
+      
       if (!initialized) {
         console.error('Không thể khởi tạo Nodemailer để gửi email');
         return IGNORE_EMAIL_ERRORS;
@@ -185,15 +408,18 @@ async function sendRejectionEmail(visit) {
     
     console.log('Đang gửi email từ chối đến:', visit.email);
     
+    // Xác định địa chỉ email gửi
+    const senderEmail = userConfig ? userConfig.email : emailConfig.email;
+    
     // In thông tin email trước khi gửi
     console.log('Thông tin email sẽ gửi:');
-    console.log('- Người gửi: thienluhoan@gmail.com');
+    console.log('- Người gửi:', senderEmail);
     console.log('- Người nhận:', visit.email);
     console.log('- Tiêu đề: Đăng ký làm việc tại văn phòng AWS không được duyệt');
     
     // Chuẩn bị nội dung email
     const mailOptions = {
-      from: '"First Cloud Journey Office" <thienluhoan@gmail.com>',
+      from: `"First Cloud Journey Office" <${senderEmail}>`,
       to: visit.email,
       subject: 'FCJ - Đăng ký làm việc tại văn phòng không được duyệt',
       html: `
@@ -274,7 +500,43 @@ async function sendRejectionEmail(visit) {
   }
 }
 
+/**
+ * Gửi email sử dụng nodemailer
+ * @param {Object} mailOptions - Cấu hình email
+ * @returns {Promise<boolean>} - Kết quả gửi email
+ */
+async function sendMail(mailOptions) {
+  try {
+    // Khởi tạo transporter nếu chưa có
+    if (!transporter) {
+      const initialized = initTransporter();
+      if (!initialized) {
+        throw new Error('Không thể khởi tạo Nodemailer');
+      }
+    }
+
+    // Gửi email
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email đã được gửi:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Lỗi khi gửi email:', error);
+    throw error;
+  }
+}
+
+/**
+ * Lấy cấu hình email hiện tại
+ * @returns {Object} - Cấu hình email hiện tại
+ */
+function getEmailConfig() {
+  return emailConfig;
+}
+
 module.exports = {
   sendApprovalEmail,
-  sendRejectionEmail
+  sendRejectionEmail,
+  updateConfig,
+  sendMail,
+  getEmailConfig
 };

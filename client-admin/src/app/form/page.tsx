@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import './styles.css';
 import './form-schedule.css';
 import Modal from '../components/Modal';
+import CustomTimePicker from '../components/CustomTimePicker';
 
 // Định nghĩa kiểu dữ liệu cho cấu hình form
 interface FieldConfig {
@@ -39,6 +40,7 @@ interface FormScheduleConfig {
 
 interface FormConfig {
   title: string;
+  isFormClosed?: boolean; // Thêm trường mới để đóng form
   formSchedule?: FormScheduleConfig;
   registrationLimit?: RegistrationLimitConfig;
   fields: {
@@ -263,10 +265,30 @@ export default function FormConfigPage() {
   // Xử lý thay đổi tiêu đề form
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!formConfig) return;
+    
     setFormConfig({
       ...formConfig,
       title: e.target.value
     });
+  };
+
+  // Xử lý đóng/mở form
+  const handleToggleFormClosed = () => {
+    if (!formConfig) return;
+
+    const newIsFormClosed = !formConfig.isFormClosed;
+    
+    setFormConfig({
+      ...formConfig,
+      isFormClosed: newIsFormClosed
+    });
+
+    // Hiển thị thông báo
+    showModal(
+      newIsFormClosed ? 'Đóng form' : 'Mở form', 
+      newIsFormClosed ? 'Form đã được đóng. Người dùng sẽ không thể gửi đăng ký mới.' : 'Form đã được mở. Người dùng có thể gửi đăng ký mới.', 
+      'info'
+    );
   };
 
   // Xử lý thay đổi cấu hình giới hạn đăng ký
@@ -274,6 +296,7 @@ export default function FormConfigPage() {
     if (!formConfig || !formConfig.registrationLimit) return;
 
     const { name, value, type, checked } = e.target;
+    
     let updatedRegistrationLimit = {
       ...formConfig.registrationLimit,
       [name]: type === 'checkbox' ? checked : name === 'maxRegistrationsPerDay' ? parseInt(value) : value
@@ -579,13 +602,13 @@ export default function FormConfigPage() {
 
     // Danh sách các ngày trong tuần
     const weekdays = [
-      { value: 0, label: 'Chủ nhật' },
       { value: 1, label: 'Thứ 2' },
       { value: 2, label: 'Thứ 3' },
       { value: 3, label: 'Thứ 4' },
       { value: 4, label: 'Thứ 5' },
       { value: 5, label: 'Thứ 6' },
-      { value: 6, label: 'Thứ 7' }
+      { value: 6, label: 'Thứ 7' },
+      { value: 0, label: 'Chủ nhật' }
     ];
 
     return (
@@ -626,42 +649,61 @@ export default function FormConfigPage() {
             {formSchedule.enabled && (
               <div className="schedule-config">
                 <div className="form-group time-group">
-                  <div>
-                    <label htmlFor="openTime">Giờ mở:</label>
-                    <input
-                      type="time"
-                      id="openTime"
-                      name="openTime"
+                  <div className="time-picker-wrapper">
+                    <CustomTimePicker
+                      onChange={(value: string) => {
+                        if (!formConfig) return;
+                        
+                        // Tạo một bản sao của formSchedule
+                        const updatedSchedule = { ...formSchedule };
+                        updatedSchedule.openTime = value || '08:00';
+                        
+                        // Cập nhật formConfig
+                        setFormConfig({
+                          ...formConfig,
+                          formSchedule: updatedSchedule
+                        });
+                      }}
                       value={formSchedule.openTime}
-                      onChange={handleFormScheduleChange}
+                      use24Hours={true}
+                      label="Giờ mở"
                     />
                   </div>
                   
-                  <div>
-                    <label htmlFor="closeTime">Giờ đóng:</label>
-                    <input
-                      type="time"
-                      id="closeTime"
-                      name="closeTime"
+                  <div className="time-picker-wrapper">
+                    <CustomTimePicker
+                      onChange={(value: string) => {
+                        if (!formConfig) return;
+                        
+                        // Tạo một bản sao của formSchedule
+                        const updatedSchedule = { ...formSchedule };
+                        updatedSchedule.closeTime = value || '17:00';
+                        
+                        // Cập nhật formConfig
+                        setFormConfig({
+                          ...formConfig,
+                          formSchedule: updatedSchedule
+                        });
+                      }}
                       value={formSchedule.closeTime}
-                      onChange={handleFormScheduleChange}
+                      use24Hours={true}
+                      label="Giờ đóng"
                     />
                   </div>
                 </div>
                 
                 <div className="form-group">
-                  <label>Ngày mở cửa</label>
+                  <label>Ngày mở form</label>
                   <div className="weekday-selector">
                     {weekdays.map(day => (
-                      <div key={day.value} className="weekday-item">
-                        <input
-                          type="checkbox"
-                          id={`day-${day.value}`}
-                          checked={formSchedule.openDays.includes(day.value)}
-                          onChange={() => handleOpenDayChange(day.value)}
-                        />
-                        <label htmlFor={`day-${day.value}`}>{day.label}</label>
-                      </div>
+                      <button
+                        key={day.value}
+                        type="button"
+                        className={`weekday-button ${formSchedule.openDays.includes(day.value) ? 'active' : ''}`}
+                        onClick={() => handleOpenDayChange(day.value)}
+                      >
+                        {day.label}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -951,67 +993,105 @@ export default function FormConfigPage() {
         message={modalContent.message}
         type={modalContent.type}
       />
-      <div className="form-header">
-        <h1>Cấu hình form đăng ký</h1>
-      </div>
-      
-      {renderMessage()}
-      
-      <div className="tabs">
-        <div 
-          className={`tab ${activeTab === 'general' ? 'active' : ''}`}
-          onClick={() => handleTabChange('general')}
-        >
-          Cấu hình chung
+      <div className="form-config-container">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1>Cấu hình form đăng ký</h1>
+          {formConfig && (
+            <button 
+              onClick={handleToggleFormClosed}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: formConfig.isFormClosed ? '#4CAF50' : '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {formConfig.isFormClosed ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                  Mở form
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  Đóng form
+                </>
+              )}
+            </button>
+          )}
         </div>
-        <div 
-          className={`tab ${activeTab === 'fields' ? 'active' : ''}`}
-          onClick={() => handleTabChange('fields')}
-        >
-          Cấu hình trường
+        
+        {renderMessage()}
+        
+        <div className="tabs">
+          <div 
+            className={`tab ${activeTab === 'general' ? 'active' : ''}`}
+            onClick={() => handleTabChange('general')}
+          >
+            Cấu hình chung
+          </div>
+          <div 
+            className={`tab ${activeTab === 'fields' ? 'active' : ''}`}
+            onClick={() => handleTabChange('fields')}
+          >
+            Cấu hình trường
+          </div>
+          <div 
+            className={`tab ${activeTab === 'limits' ? 'active' : ''}`}
+            onClick={() => handleTabChange('limits')}
+          >
+            Giới hạn đăng ký
+          </div>
         </div>
-        <div 
-          className={`tab ${activeTab === 'limits' ? 'active' : ''}`}
-          onClick={() => handleTabChange('limits')}
-        >
-          Giới hạn đăng ký
+      
+        <div className="tab-container">
+          {activeTab === 'general' && renderGeneralTab()}
+          {activeTab === 'fields' && renderFieldsTab()}
+          {activeTab === 'limits' && renderLimitsTab()}
         </div>
-      </div>
       
-      <div className="tab-container">
-        {activeTab === 'general' && renderGeneralTab()}
-        {activeTab === 'fields' && renderFieldsTab()}
-        {activeTab === 'limits' && renderLimitsTab()}
-      </div>
-      
-      <div className="save-button-container">
-        {message && message.type === 'success' && (
-          <span className="success-message">
-            {message.text}
-          </span>
-        )}
-        <button 
-          className="btn" 
-          onClick={saveFormConfig}
-          disabled={saving}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FF9900'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1e2e3e'}
-          style={{
-            backgroundColor: '#1e2e3e',
-            color: 'white',
-            border: 'none',
-            fontWeight: 600,
-            letterSpacing: '0.5px',
-            padding: '12px 30px',
-            height: '48px',
-            fontSize: '1rem',
-            borderRadius: '4px',
-            transition: 'all 0.3s ease',
-            minWidth: '160px'
-          }}
-        >
-          {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
-        </button>
+        <div className="save-button-container">
+          {message && message.type === 'success' && (
+            <span className="success-message">
+              {message.text}
+            </span>
+          )}
+          <button 
+            className="btn" 
+            onClick={saveFormConfig}
+            disabled={saving}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FF9900'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1e2e3e'}
+            style={{
+              backgroundColor: '#1e2e3e',
+              color: 'white',
+              border: 'none',
+              fontWeight: 600,
+              letterSpacing: '0.5px',
+              padding: '12px 30px',
+              height: '48px',
+              fontSize: '1rem',
+              borderRadius: '4px',
+              transition: 'all 0.3s ease',
+              minWidth: '160px'
+            }}
+          >
+            {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { io } from 'socket.io-client';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
+import ExportDialog from '../components/ExportDialog';
+import * as XLSX from 'xlsx';
 
 interface Visit {
   id: string;
@@ -31,6 +33,47 @@ const globalStyle = `
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+  }
+  
+  /* Style cho các biểu tượng sắp xếp */
+  .sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 18px;
+  }
+  
+  .sortable:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .sortable::after {
+    content: '\u25B2';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 8px;
+    opacity: 0.3;
+  }
+  
+  .sortable::before {
+    content: '\u25BC';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%) translateY(7px);
+    font-size: 8px;
+    opacity: 0.3;
+  }
+  
+  .sort-asc::after {
+    opacity: 1;
+    color: #1e2e3e;
+  }
+  
+  .sort-desc::before {
+    opacity: 1;
+    color: #1e2e3e;
   }
 `;
 
@@ -78,6 +121,12 @@ export default function ListPage(): React.ReactElement {
   const [selectedItems, setSelectedItems] = useState<string[]>([]); // Store selected item IDs
   const [selectAll, setSelectAll] = useState<boolean>(false); // Track if all items are selected
   
+  // State cho sắp xếp
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'ascending' | 'descending' | null;
+  }>({ key: '', direction: null });
+  
   // Action dropdown state
   
   // Modal state
@@ -92,6 +141,9 @@ export default function ListPage(): React.ReactElement {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [confirmAction, setConfirmAction] = useState<() => Promise<void>>(() => Promise.resolve());
   const [confirmMessage, setConfirmMessage] = useState<string>('');
+  
+  // Export dialog state
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState<boolean>(false);
 
   // Removed edit functionality as requested
   
@@ -394,22 +446,29 @@ export default function ListPage(): React.ReactElement {
   
 
   
-  // Hàm xuất danh sách đăng ký đã được duyệt ra file CSV
-  const exportApprovedList = () => {
-    // Lọc danh sách các đăng ký đã được duyệt
-    const approvedVisits = visits.filter(visit => visit.status === 'approved');
+  // Xử lý xuất danh sách đã duyệt
+  const handleExport = (format: 'excel' | 'markdown' | 'markdown-table' | 'html', floor?: string) => {
+    // Lọc các đăng ký đã được duyệt
+    let approvedVisits = visits.filter(visit => visit.status === 'approved');
+    
+    // Nếu có lọc theo tầng
+    if (floor) {
+      approvedVisits = approvedVisits.filter(visit => visit.floor === floor);
+    }
     
     if (approvedVisits.length === 0) {
-      // Hiển thị thông báo bằng modal thay vì alert
-      showModal(
-        'Thông báo', 
-        'Không có đăng ký nào đã được duyệt để xuất',
-        'info'
-      );
+      const message = floor 
+        ? `Không có đăng ký nào đã được duyệt ở tầng ${floor} để xuất!` 
+        : 'Không có đăng ký nào đã được duyệt để xuất!';
+      
+      showModal('Thông báo', message, 'info');
       return;
     }
     
-    // Tạo header cho file CSV
+    // Đóng dialog xuất
+    setIsExportDialogOpen(false);
+    
+    // Tạo header cho file
     const headers = [
       'Họ và tên',
       'Email',
@@ -426,48 +485,238 @@ export default function ListPage(): React.ReactElement {
       'Thời gian tạo'
     ];
     
-    // Chuyển đổi dữ liệu thành định dạng CSV
-    let csvContent = headers.join(',') + '\n';
+    // Chuẩn bị dữ liệu
+    const rows = approvedVisits.map(visit => [
+      visit.name || '',
+      visit.email || '',
+      visit.phone || '',
+      visit.school || '',
+      visit.studentId || '',
+      visit.date || '',
+      visit.time || '',
+      visit.floor || '',
+      visit.purpose || '',
+      visit.contact || '',
+      visit.note || '',
+      'Đã duyệt',
+      visit.createdAt || ''
+    ]);
     
-    approvedVisits.forEach(visit => {
-      // Xử lý dữ liệu để tránh lỗi khi xuất CSV
-      const processValue = (value: any) => {
-        if (value === null || value === undefined) return '';
-        const stringValue = String(value);
-        // Nếu giá trị chứa dấu phẩy, dấu nháy kép hoặc ký tự xuống dòng, bọc nó trong dấu nháy kép
-        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-          return '"' + stringValue.replace(/"/g, '""') + '"';
-        }
-        return stringValue;
-      };
+    switch (format) {
+      case 'excel':
+        exportToExcel(headers, rows);
+        break;
+      case 'markdown':
+        exportToMarkdown(headers, rows);
+        break;
+      case 'markdown-table':
+        exportToMarkdownTable(headers, rows);
+        break;
+      case 'html':
+        exportToHtml(headers, rows);
+        break;
+    }
+  };
+  
+  // Xuất ra file Excel (.xlsx)
+  const exportToExcel = (headers: string[], rows: string[][]) => {
+    try {
+      // Tạo workbook mới
+      const wb = XLSX.utils.book_new();
       
-      const row = [
-        processValue(visit.name),
-        processValue(visit.email),
-        processValue(visit.phone),
-        processValue(visit.school),
-        processValue(visit.studentId),
-        processValue(visit.date),
-        processValue(visit.time),
-        processValue(visit.floor),
-        processValue(visit.purpose),
-        processValue(visit.contact),
-        processValue(visit.note),
-        'Đã duyệt',
-        processValue(visit.createdAt)
-      ];
+      // Thêm dữ liệu vào worksheet, bao gồm cả headers
+      const data = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(data);
       
-      csvContent += row.join(',') + '\n';
+      // Thiết lập chiều rộng cột
+      const wscols = headers.map(() => ({ wch: 20 })); // Chiều rộng mặc định cho mỗi cột
+      ws['!cols'] = wscols;
+      
+      // Thêm worksheet vào workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Danh sách đã duyệt');
+      
+      // Xuất file với tên có ngày hiện tại
+      const fileName = `danh-sach-da-duyet-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      
+      // Chuyển đổi workbook thành mảng binary
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      
+      // Tạo Blob từ mảng binary
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      
+      // Tạo URL cho Blob
+      const url = URL.createObjectURL(blob);
+      
+      // Tạo thẻ a để tải xuống
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      
+      // Kích hoạt sự kiện click để tải xuống
+      link.click();
+      
+      // Dọn dẹp
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      // Hiển thị thông báo thành công
+      showModal(
+        'Thành công',
+        `Đã xuất file Excel thành công!`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Lỗi khi xuất file Excel:', error);
+      showModal(
+        'Lỗi',
+        'Có lỗi xảy ra khi xuất file Excel. Vui lòng thử lại sau.',
+        'error'
+      );
+    }
+  };
+  
+  // Xuất ra file Markdown (.md)
+  const exportToMarkdown = (headers: string[], rows: string[][]) => {
+    let markdownContent = `# Danh sách đăng ký đã duyệt
+
+Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}
+
+`;
+    
+    rows.forEach((row, index) => {
+      markdownContent += `## ${index + 1}. ${row[0]}
+
+`;
+      
+      for (let i = 0; i < headers.length; i++) {
+        markdownContent += `- **${headers[i]}**: ${row[i]}
+`;
+      }
+      
+      markdownContent += '\n';
     });
     
     // Tạo Blob và tạo URL để tải xuống
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
     // Tạo thẻ a để tải xuống
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `danh-sach-da-duyet-${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `danh-sach-da-duyet-${new Date().toISOString().slice(0, 10)}.md`);
+    document.body.appendChild(link);
+    
+    // Kích hoạt sự kiện click để tải xuống
+    link.click();
+    
+    // Dọn dẹp
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  
+  // Xuất ra file Markdown Table (.md)
+  const exportToMarkdownTable = (headers: string[], rows: string[][]) => {
+    let markdownContent = `# Danh sách đăng ký đã duyệt
+
+Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}
+
+`;
+    
+    // Tạo header của bảng
+    markdownContent += '| ' + headers.join(' | ') + ' |\n';
+    markdownContent += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+    
+    // Thêm dữ liệu vào bảng
+    rows.forEach(row => {
+      // Thay thế các ký tự đặc biệt trong Markdown
+      const escapedRow = row.map(cell => {
+        if (cell === null || cell === undefined) return '';
+        return cell.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+      });
+      
+      markdownContent += '| ' + escapedRow.join(' | ') + ' |\n';
+    });
+    
+    // Tạo Blob và tạo URL để tải xuống
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    // Tạo thẻ a để tải xuống
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `danh-sach-da-duyet-bang-${new Date().toISOString().slice(0, 10)}.md`);
+    document.body.appendChild(link);
+    
+    // Kích hoạt sự kiện click để tải xuống
+    link.click();
+    
+    // Dọn dẹp
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  
+  // Xuất ra file HTML (.html)
+  const exportToHtml = (headers: string[], rows: string[][]) => {
+    let htmlContent = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Danh sách đăng ký đã duyệt</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #1e2e3e; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #1e2e3e; color: white; }
+    tr:nth-child(even) { background-color: #f2f2f2; }
+    .export-date { color: #666; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Danh sách đăng ký đã duyệt</h1>
+  <p class="export-date">Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}</p>
+  
+  <table>
+    <thead>
+      <tr>
+        ${headers.map(header => `<th>${header}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+`;
+    
+    // Thêm dữ liệu vào bảng
+    rows.forEach(row => {
+      htmlContent += '      <tr>\n';
+      row.forEach(cell => {
+        const escapedCell = cell
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;')
+          .replace(/\n/g, '<br>');
+        
+        htmlContent += `        <td>${escapedCell}</td>\n`;
+      });
+      htmlContent += '      </tr>\n';
+    });
+    
+    htmlContent += `    </tbody>
+  </table>
+</body>
+</html>`;
+    
+    // Tạo Blob và tạo URL để tải xuống
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    // Tạo thẻ a để tải xuống
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `danh-sach-da-duyet-${new Date().toISOString().slice(0, 10)}.html`);
     document.body.appendChild(link);
     
     // Kích hoạt sự kiện click để tải xuống
@@ -765,6 +1014,19 @@ export default function ListPage(): React.ReactElement {
     });
   }, [visits]);
   
+  // Lấy danh sách các tầng có sẵn
+  const availableFloors = React.useMemo(() => {
+    const floors = new Set<string>();
+    
+    visits.forEach(visit => {
+      if (visit.floor) {
+        floors.add(visit.floor);
+      }
+    });
+    
+    return Array.from(floors).sort();
+  }, [visits]);
+  
   // Thiết lập mặc định hiển thị ngày hiện tại khi component mounts
   useEffect(() => {
     // Lấy ngày hiện tại theo định dạng dd/mm/yyyy
@@ -784,8 +1046,38 @@ export default function ListPage(): React.ReactElement {
       setDateFilter(hasDataForToday ? formattedToday : 'all');
     }
   }, [visits]);
+  
+  // Hàm xử lý sắp xếp
+  const requestSort = (key: string) => {
+    let direction: 'ascending' | 'descending' | null = 'ascending';
+    
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === 'ascending') {
+        direction = 'descending';
+      } else if (sortConfig.direction === 'descending') {
+        direction = null; // Bỏ sắp xếp
+      }
+    }
+    
+    setSortConfig({ key, direction });
+  };
+  
+  // Hàm lấy class cho tiêu đề cột
+  const getHeaderSortClass = (key: string) => {
+    if (sortConfig.key !== key) {
+      return 'sortable';
+    }
+    
+    if (sortConfig.direction === null) {
+      return 'sortable';
+    }
+    
+    return sortConfig.direction === 'ascending' ? 'sortable sort-asc' : 'sortable sort-desc';
+  };
 
-  const filteredVisits = visits.filter(visit => {
+  // Lọc danh sách
+  // Lọc danh sách
+  let filteredVisits = visits.filter(visit => {
     // Filter by status
     if (filter !== 'all' && visit.status !== filter) return false;
     
@@ -820,6 +1112,67 @@ export default function ListPage(): React.ReactElement {
     
     return true;
   });
+  
+  // Áp dụng sắp xếp nếu có
+  if (sortConfig.key && sortConfig.direction) {
+    filteredVisits.sort((a, b) => {
+      // Lấy giá trị cần so sánh dựa trên key
+      let aValue: any;
+      let bValue: any;
+      
+      switch (sortConfig.key) {
+        case 'name':
+          aValue = a.name || '';
+          bValue = b.name || '';
+          break;
+        case 'phone':
+          aValue = a.phone || '';
+          bValue = b.phone || '';
+          break;
+        case 'email':
+          aValue = a.email || '';
+          bValue = b.email || '';
+          break;
+        case 'school':
+          aValue = a.school || '';
+          bValue = b.school || '';
+          break;
+        case 'studentId':
+          aValue = a.studentId || '';
+          bValue = b.studentId || '';
+          break;
+        case 'floor':
+          aValue = a.floor || '';
+          bValue = b.floor || '';
+          break;
+        case 'date':
+          // Chuyển đổi ngày thành đối tượng Date để so sánh
+          aValue = new Date(a.date.split('/').reverse().join('-'));
+          bValue = new Date(b.date.split('/').reverse().join('-'));
+          break;
+        case 'contact':
+          aValue = a.contact || '';
+          bValue = b.contact || '';
+          break;
+        case 'purpose':
+          aValue = a.purpose || '';
+          bValue = b.purpose || '';
+          break;
+        default:
+          aValue = a[sortConfig.key as keyof Visit] || '';
+          bValue = b[sortConfig.key as keyof Visit] || '';
+      }
+      
+      // So sánh giá trị
+      if (aValue < bValue) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
+    });
+  }
 
   return (
     <>
@@ -1465,7 +1818,7 @@ export default function ListPage(): React.ReactElement {
             
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
-                onClick={exportApprovedList}
+                onClick={() => setIsExportDialogOpen(true)}
                 style={{ 
                   padding: '8px 15px', 
                   backgroundColor: '#1e2e3e',
@@ -1583,15 +1936,69 @@ export default function ListPage(): React.ReactElement {
                   <th style={{ width: '3%' }} className="center">
                     STT
                   </th>
-                  <th style={{ width: '10%' }}>Họ tên</th>
-                  <th style={{ width: '5%' }}>Số điện thoại</th>
-                  <th style={{ width: '12%' }}>Email</th>
-                  <th className="school" style={{ width: '10%' }}>Trường</th>
-                  <th style={{ width: '8%' }}>MSSV</th>
-                  <th className="center" style={{ width: '3%' }}>Tầng</th>
-                  <th style={{ width: '8%' }}>Ngày đăng ký</th>
-                  <th style={{ width: '8%' }}>Người liên hệ</th>
-                  <th style={{ width: '6%' }}>Mục đích</th>
+                  <th 
+                    style={{ width: '10%' }} 
+                    className={getHeaderSortClass('name')}
+                    onClick={() => requestSort('name')}
+                  >
+                    Họ tên
+                  </th>
+                  <th 
+                    style={{ width: '5%' }} 
+                    className={getHeaderSortClass('phone')}
+                    onClick={() => requestSort('phone')}
+                  >
+                    Số điện thoại
+                  </th>
+                  <th 
+                    style={{ width: '12%' }} 
+                    className={getHeaderSortClass('email')}
+                    onClick={() => requestSort('email')}
+                  >
+                    Email
+                  </th>
+                  <th 
+                    className={`school ${getHeaderSortClass('school')}`} 
+                    style={{ width: '10%' }}
+                    onClick={() => requestSort('school')}
+                  >
+                    Trường
+                  </th>
+                  <th 
+                    style={{ width: '8%' }} 
+                    className={getHeaderSortClass('studentId')}
+                    onClick={() => requestSort('studentId')}
+                  >
+                    MSSV
+                  </th>
+                  <th 
+                    className={`center ${getHeaderSortClass('floor')}`} 
+                    style={{ width: '3%' }}
+                    onClick={() => requestSort('floor')}
+                  >
+                    Tầng
+                  </th>
+                  <th 
+                    style={{ width: '8%' }} 
+                    className={getHeaderSortClass('date')}
+                    onClick={() => requestSort('date')}
+                  >
+                    Ngày đăng ký
+                  </th>
+                  <th 
+                    style={{ width: '8%' }} 
+                    className={getHeaderSortClass('contact')}
+                    onClick={() => requestSort('contact')}
+                  >
+                    Người liên hệ
+                  </th>
+                  <th 
+                    style={{ width: '6%' }} 
+                    className={getHeaderSortClass('purpose')}
+                    onClick={() => requestSort('purpose')}
+                  >
+                    Mục đích
+                  </th>
                   <th className="center" style={{ width: '6%' }}>Thao tác</th>
                 </tr>
               </thead>
@@ -1702,6 +2109,31 @@ export default function ListPage(): React.ReactElement {
           </div>
         </div>
       )}
+      
+      {/* Modal */}
+      <Modal 
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={modalContent.title}
+        message={modalContent.message}
+        type={modalContent.type}
+      />
+      
+      {/* Confirm modal */}
+      <ConfirmModal 
+        isOpen={isConfirmModalOpen}
+        onClose={closeConfirmModal}
+        onConfirm={confirmAction}
+        message={confirmMessage}
+      />
+      
+      {/* Export dialog */}
+      <ExportDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        onExport={handleExport}
+        availableFloors={availableFloors}
+      />
     </div>
     </>
   );

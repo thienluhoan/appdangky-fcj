@@ -25,6 +25,7 @@ const ensureDirectoryExists = (filePath: string) => {
 // Cấu hình mặc định
 const defaultConfig = {
   title: 'Đăng ký lên văn phòng',
+  isFormClosed: false, // Thêm trường mới để quản lý trạng thái đóng/mở form
   registrationLimit: {
     enabled: true,
     maxRegistrationsPerDay: 10,

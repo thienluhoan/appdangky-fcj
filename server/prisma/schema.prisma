@@ -34,10 +34,47 @@ model Visit {
 model FormConfig {
   id                String   @id @default("default")
   title             String   @default("Đăng ký lên văn phòng")
+  isFormClosed      Boolean  @default(false)
   registrationLimit Json?
   fields            Json
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   @@map("form_config")
+}
+
+enum UserRole {
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id                String    @id @default(cuid())
+  username          String    @unique
+  email             String    @unique
+  password          String
+  role              UserRole  @default(ADMIN)
+  isVerified        Boolean   @default(false)
+  verificationToken String?   
+  tokenExpiry       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  emailConfig       EmailConfig?
+
+  @@map("users")
+}
+
+model EmailConfig {
+  id        String   @id @default(cuid())
+  host      String   @default("smtp.gmail.com")
+  port      String   @default("587")
+  secure    Boolean  @default(false)
+  email     String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+
+  @@map("email_configs")
 }

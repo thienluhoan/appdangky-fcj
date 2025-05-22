@@ -45,20 +45,25 @@
 
 .time-group {
   display: flex;
-  gap: 30px;
+  gap: 15px;
+  justify-content: center;
   margin-bottom: 30px;
   position: relative;
+  border: none;
+  background: none;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
+/* Loại bỏ vạch ngang thừa */
+.time-group::before,
 .time-group::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 20px;
-  height: 2px;
-  background: #d1d5db;
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
 }
 
 .time-group > div {
@@ -115,9 +120,10 @@
   justify-content: center;
 }
 
-.weekday-item {
+.weekday-button {
   display: flex;
   align-items: center;
+  justify-content: center;
   background-color: white;
   padding: 10px 15px;
   border-radius: 8px;
@@ -125,32 +131,22 @@
   transition: all 0.3s ease;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  font-size: 15px;
+  color: #4b5563;
+  font-weight: 500;
+  min-width: 100px;
 }
 
-.weekday-item:hover {
-  border-color: #93c5fd;
-  background-color: #eff6ff;
+.weekday-button:hover {
+  border-color: #3d5a73;
+  background-color: #f0f5fa;
   transform: translateY(-2px);
 }
 
-.weekday-item input[type="checkbox"] {
-  margin-right: 10px;
-  width: 18px;
-  height: 18px;
-  accent-color: #2563eb;
-  cursor: pointer;
-}
-
-.weekday-item label {
-  font-size: 15px;
-  color: #4b5563;
-  cursor: pointer;
-  font-weight: 500;
-  user-select: none;
-}
-
-.weekday-item input[type="checkbox"]:checked + label {
-  color: #1e40af;
+.weekday-button.active {
+  border-color: #1e2e3e;
+  background-color: #1e2e3e;
+  color: white;
   font-weight: 600;
 }
 

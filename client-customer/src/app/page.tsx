@@ -32,6 +32,7 @@ interface RegistrationLimitConfig {
 
 interface FormConfig {
   title: string;
+  isFormClosed?: boolean; // Thêm trường mới để kiểm tra trạng thái đóng/mở form
   registrationLimit?: RegistrationLimitConfig;
   fields: {
     [key: string]: FieldConfig;
@@ -700,6 +701,36 @@ export default function RegisterPage(): React.ReactElement {
     return null;
   };
   
+  // Hiển thị thông báo khi form bị đóng
+  const renderFormClosedMessage = () => {
+    if (formConfig?.isFormClosed) {
+      return (
+        <div style={{ 
+          backgroundColor: '#ffebee', 
+          color: '#d32f2f', 
+          padding: '15px',
+          borderRadius: '5px',
+          marginBottom: '20px',
+          fontSize: '0.95rem',
+          border: '1px solid #ffcdd2',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <div>
+            <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Form đã đóng</p>
+            <p style={{ margin: '0' }}>Form đăng ký hiện đã đóng. Vui lòng quay lại sau.</p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   // Hiển thị thông báo khi đã đạt giới hạn đăng ký
   const renderLimitReachedMessage = () => {
     // Nếu đạt giới hạn đăng ký theo ngày
@@ -837,11 +868,14 @@ export default function RegisterPage(): React.ReactElement {
           <>
             <h1 className="card-title">{formConfig?.title || 'Đăng ký lên văn phòng'}</h1>
             
-            {/* Hiển thị thông tin về giới hạn đăng ký */}
-            {renderRegistrationLimitInfo()}
+            {/* Hiển thị thông báo khi form bị đóng */}
+            {renderFormClosedMessage()}
             
-            {/* Hiển thị thông báo khi đạt giới hạn */}
-            {renderLimitReachedMessage()}
+            {/* Hiển thị thông tin về giới hạn đăng ký nếu form không bị đóng */}
+            {!formConfig?.isFormClosed && renderRegistrationLimitInfo()}
+            
+            {/* Hiển thị thông báo khi đạt giới hạn nếu form không bị đóng */}
+            {!formConfig?.isFormClosed && renderLimitReachedMessage()}
             {/* Xóa phần code dưới đây để tránh hiển thị trùng lặp */}
             {false && limitReached && formConfig?.registrationLimit?.enabled && (
               <div style={{ 
@@ -868,7 +902,9 @@ export default function RegisterPage(): React.ReactElement {
               </div>
             )}
             
-            <form onSubmit={handleSubmit} style={{ opacity: limitReached ? '0.7' : '1', pointerEvents: limitReached ? 'none' : 'auto' }}>
+            {/* Chỉ hiển thị form nếu form không bị đóng */}
+            {!formConfig?.isFormClosed && (
+              <form onSubmit={handleSubmit} style={{ opacity: limitReached ? '0.7' : '1', pointerEvents: limitReached ? 'none' : 'auto' }}>
               {/* Họ và tên */}
               {formConfig?.fields.name?.enabled && (
                 <div className="form-group">
@@ -1088,6 +1124,7 @@ export default function RegisterPage(): React.ReactElement {
                 {loading ? 'Đang xử lý...' : 'Gửi đăng ký'}
               </button>
             </form>
+            )}
           </>
         )}
       </div>

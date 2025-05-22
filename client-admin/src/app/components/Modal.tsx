@@ -21,12 +21,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, message, type }) 
   const getTypeColor = () => {
     switch (type) {
       case 'success':
-        return '#4caf50';
+        return '#1e2e3e'; // Màu xanh giống navbar
       case 'error':
-        return '#f44336';
+        return '#1e2e3e'; // Màu xanh giống navbar
       case 'info':
       default:
-        return '#2196f3';
+        return '#1e2e3e'; // Màu xanh giống navbar
     }
   };
 

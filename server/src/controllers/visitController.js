@@ -183,10 +183,14 @@ async function updateVisitStatus(req, res) {
               let emailSent = false;
               
               try {
+                // Lấy ID của người dùng đang thực hiện hành động từ req.user
+                const userId = req.user ? req.user.id : null;
+                console.log('Người dùng gửi email:', userId);
+                
                 if (status === 'approved') {
-                  emailSent = await sendApprovalEmail(updatedVisit);
+                  emailSent = await sendApprovalEmail(updatedVisit, userId);
                 } else {
-                  emailSent = await sendRejectionEmail(updatedVisit);
+                  emailSent = await sendRejectionEmail(updatedVisit, userId);
                 }
                 
                 console.log(`Kết quả gửi email ${status === 'approved' ? 'duyệt' : 'từ chối'}: ${emailSent ? 'Thành công' : 'Thất bại nhưng đã bỏ qua'}`);

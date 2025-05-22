@@ -2,13 +2,13 @@
   "title": "ĐĂNG KÝ LÊN VĂN PHÒNG",
   "registrationLimit": {
     "enabled": true,
-    "maxRegistrationsPerDay": 2,
+    "maxRegistrationsPerDay": 20,
     "message": "Rất tiếc, số lượt đăng ký trong ngày hôm nay đã đạt giới hạn. Vui lòng thử lại vào ngày mai.",
-    "byFloor": false,
+    "byFloor": true,
     "floorLimits": [
       {
         "floorName": "Tầng 26",
-        "maxRegistrations": 5,
+        "maxRegistrations": 20,
         "enabled": true
       },
       {
@@ -85,9 +85,9 @@
     }
   },
   "formSchedule": {
-    "enabled": true,
-    "openTime": "16:00",
-    "closeTime": "17:00",
+    "enabled": false,
+    "openTime": "21:20",
+    "closeTime": "22:00",
     "openDays": [
       0,
       1,
@@ -95,6 +95,7 @@
       3,
       4
     ],
-    "closedMessage": "Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa."
-  }
+    "closedMessage": "Form đăng ký hiện đã đóng. Vui lòng quay lại sau."
+  },
+  "isFormClosed": false
 }

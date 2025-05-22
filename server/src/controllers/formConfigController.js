@@ -23,6 +23,7 @@ const ensureDirectoryExists = (filePath) => {
 // Cấu hình mặc định
 const defaultConfig = {
   title: 'Đăng ký lên văn phòng',
+  isFormClosed: false, // Thêm trường mới để quản lý trạng thái đóng/mở form
   registrationLimit: {
     enabled: true,
     maxRegistrationsPerDay: 12,
@@ -109,6 +110,7 @@ exports.getFormConfig = async (req, res) => {
             data: {
               id: 'default',
               title: oldConfig.title || defaultConfig.title,
+              isFormClosed: oldConfig.isFormClosed !== undefined ? oldConfig.isFormClosed : defaultConfig.isFormClosed,
               registrationLimit: oldConfig.registrationLimit || defaultConfig.registrationLimit,
               fields: oldConfig.fields || defaultConfig.fields
             }
@@ -123,6 +125,7 @@ exports.getFormConfig = async (req, res) => {
             data: {
               id: 'default',
               title: defaultConfig.title,
+              isFormClosed: defaultConfig.isFormClosed,
               registrationLimit: defaultConfig.registrationLimit,
               fields: defaultConfig.fields
             }
@@ -136,6 +139,7 @@ exports.getFormConfig = async (req, res) => {
           data: {
             id: 'default',
             title: defaultConfig.title,
+            isFormClosed: defaultConfig.isFormClosed,
             registrationLimit: defaultConfig.registrationLimit,
             fields: defaultConfig.fields
           }
@@ -162,12 +166,14 @@ exports.saveFormConfig = async (req, res) => {
       where: { id: 'default' },
       update: {
         title: formConfig.title,
+        isFormClosed: formConfig.isFormClosed !== undefined ? formConfig.isFormClosed : false,
         registrationLimit: formConfig.registrationLimit,
         fields: formConfig.fields
       },
       create: {
         id: 'default',
         title: formConfig.title,
+        isFormClosed: formConfig.isFormClosed !== undefined ? formConfig.isFormClosed : false,
         registrationLimit: formConfig.registrationLimit,
         fields: formConfig.fields
       }

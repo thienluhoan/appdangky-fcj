@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage(): React.ReactElement {
   const router = useRouter();
@@ -9,6 +10,42 @@ export default function LoginPage(): React.ReactElement {
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [needsInitialSetup, setNeedsInitialSetup] = useState<boolean>(false);
+  const [checkingSetup, setCheckingSetup] = useState<boolean>(true);
+  
+  // Kiểm tra xem đã có người dùng nào trong hệ thống chưa
+  useEffect(() => {
+    const checkInitialSetup = async () => {
+      try {
+        // Thêm tham số cache: 'no-store' để đảm bảo luôn lấy dữ liệu mới nhất
+        const res = await fetch('/api/check-initial-setup', {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        const data = await res.json();
+        
+        // Chỉ hiển thị thông báo đăng ký nếu chưa có admin nào
+        if (data.success) {
+          console.log('Initial setup check result:', data.needsInitialSetup);
+          setNeedsInitialSetup(data.needsInitialSetup);
+        } else {
+          // Nếu có lỗi, đặt mặc định là false để không hiển thị nút đăng ký
+          setNeedsInitialSetup(false);
+        }
+      } catch (err) {
+        console.error('Lỗi khi kiểm tra cài đặt ban đầu:', err);
+        // Nếu có lỗi, đặt mặc định là false để không hiển thị nút đăng ký
+        setNeedsInitialSetup(false);
+      } finally {
+        setCheckingSetup(false);
+      }
+    };
+    
+    checkInitialSetup();
+  }, []);
 
   // const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
   //   e.preventDefault();
@@ -49,10 +86,20 @@ export default function LoginPage(): React.ReactElement {
       const data = await res.json();
   
       if (data.success) {
-        localStorage.setItem('adminLoggedIn', 'true')
-        router.push('/')
+        localStorage.setItem('adminLoggedIn', 'true');
+        
+        // Lưu thông tin người dùng vào localStorage nếu có
+        if (data.user) {
+          const userData = {
+            username: data.user.username || 'Admin',
+            email: data.user.email || ''
+          };
+          localStorage.setItem('userData', JSON.stringify(userData));
+        }
+        
+        router.push('/');
         setTimeout(() => {
-          window.location.reload()
+          window.location.reload();
         }, 200);
       } else {
         setError(data.error || 'Đăng nhập thất bại')
@@ -67,12 +114,12 @@ export default function LoginPage(): React.ReactElement {
   
   return (
     <div style={{ 
-      minHeight: '80vh', 
+      minHeight: '100vh', 
       backgroundColor: '#f5f5f5', 
       display: 'flex', 
-      alignItems: 'flex-start', 
+      alignItems: 'center', 
       justifyContent: 'center', 
-      padding: '80px 20px 0'
+      padding: '0 20px'
     }}>
       <div style={{ 
         maxWidth: '400px', 
@@ -202,25 +249,40 @@ export default function LoginPage(): React.ReactElement {
               border: 'none', 
               borderRadius: '4px', 
               fontSize: '16px', 
-              fontWeight: '600', 
+              fontWeight: '500',
               cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 4px rgba(30, 46, 62, 0.3)',
-              opacity: loading ? 0.7 : 1
-            }}
-            onMouseOver={(e) => {
-              if (!loading) e.currentTarget.style.backgroundColor = '#2c3e50';
-              if (!loading) e.currentTarget.style.transform = 'translateY(-2px)';
-              if (!loading) e.currentTarget.style.boxShadow = '0 4px 8px rgba(30, 46, 62, 0.4)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#1e2e3e';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 4px rgba(30, 46, 62, 0.3)';
+              opacity: loading ? 0.7 : 1,
+              transition: 'all 0.2s ease'
             }}
           >
             {loading ? 'Đang xử lý...' : 'Đăng nhập'}
           </button>
+          
+          {needsInitialSetup && (
+            <div style={{ 
+              marginTop: '20px', 
+              textAlign: 'center', 
+              fontSize: '14px', 
+              color: '#666' 
+            }}>
+              <span style={{ display: 'block', marginBottom: '5px' }}>
+                Chưa có tài khoản nào trong hệ thống.
+              </span>
+              <Link href="/register" style={{ 
+                display: 'inline-block',
+                backgroundColor: '#1e2e3e',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                textDecoration: 'none',
+                fontWeight: '500',
+                fontSize: '14px',
+                transition: 'background-color 0.3s ease'
+              }}>
+                Đăng ký tài khoản admin
+              </Link>
+            </div>
+          )}
         </form>
       </div>
     </div>

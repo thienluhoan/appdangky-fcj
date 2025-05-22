@@ -41,14 +41,14 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onClose, onConfirm,
           borderRadius: '8px',
           background: '#fff',
           boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #2196f3'
+          border: '1px solid #1e2e3e'
         }
       }}
     >
       <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ 
           margin: 0, 
-          color: '#2196f3', 
+          color: '#1e2e3e', 
           fontSize: '20px',
           fontWeight: 600
         }}>
@@ -93,7 +93,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onClose, onConfirm,
           }}
           style={{
             padding: '8px 16px',
-            background: '#2196f3',
+            background: '#1e2e3e',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
