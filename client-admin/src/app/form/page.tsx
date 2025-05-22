@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import './styles.css';
+import './form-schedule.css';
+import Modal from '../components/Modal';
 
 // Định nghĩa kiểu dữ liệu cho cấu hình form
 interface FieldConfig {
@@ -27,8 +29,17 @@ interface RegistrationLimitConfig {
   floorLimits?: FloorLimit[];
 }
 
+interface FormScheduleConfig {
+  enabled: boolean;
+  openTime: string;
+  closeTime: string;
+  openDays: number[];
+  closedMessage: string;
+}
+
 interface FormConfig {
   title: string;
+  formSchedule?: FormScheduleConfig;
   registrationLimit?: RegistrationLimitConfig;
   fields: {
     [key: string]: FieldConfig;
@@ -42,6 +53,24 @@ export default function FormConfigPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'fields' | 'limits'>('general');
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [modalContent, setModalContent] = useState<{
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({ title: '', message: '', type: 'info' });
+  
+  // Modal helper functions
+  const showModal = (title: string, message: string, type: 'success' | 'error' | 'info') => {
+    setModalContent({ title, message, type });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
   
   // Xử lý thay đổi tab
   const handleTabChange = (tab: 'general' | 'fields' | 'limits') => {
@@ -130,36 +159,105 @@ export default function FormConfigPage() {
       const response = await fetch('/api/form-config', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formConfig)
+        body: JSON.stringify(formConfig),
       });
 
       if (response.ok) {
-        setMessage({
-          text: 'Cấu hình form đã được lưu thành công',
-          type: 'success'
-        });
-        
-        // Tự động ẩn thông báo sau 3 giây
-        setTimeout(() => {
-          setMessage(null);
-        }, 3000);
+        // Chỉ hiển thị thông báo thành công bằng modal, không hiển thị text
+        showModal(
+          'Thành công', 
+          'Đã lưu cấu hình form thành công', 
+          'success'
+        );
       } else {
-        setMessage({
-          text: 'Không thể lưu cấu hình form',
-          type: 'error'
-        });
+        const errorData = await response.json();
+        // Chỉ hiển thị thông báo lỗi bằng modal, không hiển thị text
+        showModal(
+          'Lỗi', 
+          errorData.message || 'Lỗi khi lưu cấu hình form', 
+          'error'
+        );
       }
     } catch (error) {
       console.error('Lỗi khi lưu cấu hình form:', error);
-      setMessage({
-        text: 'Lỗi khi lưu cấu hình form',
-        type: 'error'
-      });
+      // Chỉ hiển thị thông báo lỗi bằng modal, không hiển thị text
+      showModal(
+        'Lỗi', 
+        'Lỗi khi lưu cấu hình form', 
+        'error'
+      );
     } finally {
       setSaving(false);
     }
+  };
+
+  // Xử lý thay đổi cấu hình mở/đóng form
+  const handleFormScheduleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    
+    if (!formConfig) return;
+    
+    // Tạo một bản sao của formSchedule hoặc tạo mới nếu chưa có
+    const updatedSchedule = formConfig.formSchedule ? { ...formConfig.formSchedule } : {
+      enabled: false,
+      openTime: '08:00',
+      closeTime: '17:00',
+      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
+      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
+    };
+    
+    // Cập nhật giá trị dựa trên loại input
+    if (type === 'checkbox') {
+      const checkbox = e.target as HTMLInputElement;
+      (updatedSchedule as any)[name] = checkbox.checked;
+    } else {
+      (updatedSchedule as any)[name] = value;
+    }
+    
+    // Cập nhật formConfig
+    setFormConfig({
+      ...formConfig,
+      formSchedule: updatedSchedule
+    });
+  };
+  
+  // Xử lý thay đổi ngày mở cửa
+  const handleOpenDayChange = (day: number) => {
+    if (!formConfig) return;
+    
+    // Tạo một bản sao của formSchedule hoặc tạo mới nếu chưa có
+    const updatedSchedule = formConfig.formSchedule ? { ...formConfig.formSchedule } : {
+      enabled: false,
+      openTime: '08:00',
+      closeTime: '17:00',
+      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
+      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
+    };
+    
+    // Kiểm tra xem ngày đã có trong danh sách chưa
+    const openDays = updatedSchedule.openDays || [];
+    const index = openDays.indexOf(day);
+    
+    // Nếu đã có thì xóa, nếu chưa có thì thêm
+    if (index !== -1) {
+      openDays.splice(index, 1);
+    } else {
+      openDays.push(day);
+    }
+    
+    // Sắp xếp lại danh sách ngày
+    openDays.sort((a, b) => a - b);
+    
+    // Cập nhật formConfig
+    setFormConfig({
+      ...formConfig,
+      formSchedule: {
+        ...updatedSchedule,
+        openDays
+      }
+    });
   };
 
   // Xử lý thay đổi tiêu đề form
@@ -180,6 +278,11 @@ export default function FormConfigPage() {
       ...formConfig.registrationLimit,
       [name]: type === 'checkbox' ? checked : name === 'maxRegistrationsPerDay' ? parseInt(value) : value
     };
+    
+    // Nếu tắt giới hạn đăng ký, tự động tắt cả giới hạn theo tầng
+    if (name === 'enabled' && !checked) {
+      updatedRegistrationLimit.byFloor = false;
+    }
     
     // Nếu bật giới hạn theo tầng, tự động tạo cấu hình cho các tầng dựa trên danh sách tầng
     if (name === 'byFloor' && checked) {
@@ -215,7 +318,7 @@ export default function FormConfigPage() {
       registrationLimit: updatedRegistrationLimit
     });
   };
-  
+
   // Xử lý thay đổi giới hạn theo tầng
   const handleFloorLimitChange = (index: number, field: string, value: any) => {
     if (!formConfig || !formConfig.registrationLimit || !formConfig.registrationLimit.floorLimits) return;
@@ -465,6 +568,26 @@ export default function FormConfigPage() {
   const renderGeneralTab = () => {
     if (!formConfig) return null;
 
+    // Khởi tạo formSchedule nếu chưa có
+    const formSchedule = formConfig.formSchedule || {
+      enabled: false,
+      openTime: '08:00',
+      closeTime: '17:00',
+      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
+      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
+    };
+
+    // Danh sách các ngày trong tuần
+    const weekdays = [
+      { value: 0, label: 'Chủ nhật' },
+      { value: 1, label: 'Thứ 2' },
+      { value: 2, label: 'Thứ 3' },
+      { value: 3, label: 'Thứ 4' },
+      { value: 4, label: 'Thứ 5' },
+      { value: 5, label: 'Thứ 6' },
+      { value: 6, label: 'Thứ 7' }
+    ];
+
     return (
       <div className="tab-content">
         <div className="general-form">
@@ -478,14 +601,84 @@ export default function FormConfigPage() {
               placeholder="Nhập tiêu đề form"
             />
           </div>
-          <div className="form-preview">
-            <h3>Xem trước</h3>
-            <div className="preview-container">
-              <h2>{formConfig.title}</h2>
-              <div className="preview-info">
-                Đây là tiêu đề sẽ hiển thị trên trang đăng ký của khách hàng
+          {/* Phần xem trước đã được xóa theo yêu cầu */}
+          
+          {/* Phần cấu hình mở/đóng form theo giờ */}
+          <div className="form-schedule-section">
+            <h3>Đặt lịch đóng/mở form</h3>
+            
+            <div className="form-group">
+              <div className="toggle-group">
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    id="scheduleEnabled"
+                    name="enabled"
+                    checked={formSchedule.enabled}
+                    onChange={handleFormScheduleChange}
+                  />
+                  <span className="slider"></span>
+                </label>
+                <label htmlFor="scheduleEnabled">Bật tính năng đặt lịch đóng/mở form</label>
               </div>
             </div>
+            
+            {formSchedule.enabled && (
+              <div className="schedule-config">
+                <div className="form-group time-group">
+                  <div>
+                    <label htmlFor="openTime">Giờ mở:</label>
+                    <input
+                      type="time"
+                      id="openTime"
+                      name="openTime"
+                      value={formSchedule.openTime}
+                      onChange={handleFormScheduleChange}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="closeTime">Giờ đóng:</label>
+                    <input
+                      type="time"
+                      id="closeTime"
+                      name="closeTime"
+                      value={formSchedule.closeTime}
+                      onChange={handleFormScheduleChange}
+                    />
+                  </div>
+                </div>
+                
+                <div className="form-group">
+                  <label>Ngày mở cửa</label>
+                  <div className="weekday-selector">
+                    {weekdays.map(day => (
+                      <div key={day.value} className="weekday-item">
+                        <input
+                          type="checkbox"
+                          id={`day-${day.value}`}
+                          checked={formSchedule.openDays.includes(day.value)}
+                          onChange={() => handleOpenDayChange(day.value)}
+                        />
+                        <label htmlFor={`day-${day.value}`}>{day.label}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="closedMessage">Thông báo khi form đóng</label>
+                  <textarea
+                    id="closedMessage"
+                    name="closedMessage"
+                    value={formSchedule.closedMessage}
+                    onChange={handleFormScheduleChange}
+                    placeholder="Nhập thông báo hiển thị khi form đóng"
+                    rows={4}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -502,14 +695,17 @@ export default function FormConfigPage() {
           <h3>Cấu hình giới hạn đăng ký</h3>
           
           <div className="form-group">
-            <div className="checkbox-group">
-              <input
-                type="checkbox"
-                id="limitEnabled"
-                name="enabled"
-                checked={formConfig.registrationLimit.enabled}
-                onChange={handleLimitChange}
-              />
+            <div className="toggle-group">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  id="limitEnabled"
+                  name="enabled"
+                  checked={formConfig.registrationLimit.enabled}
+                  onChange={handleLimitChange}
+                />
+                <span className="slider"></span>
+              </label>
               <label htmlFor="limitEnabled">Bật giới hạn đăng ký</label>
             </div>
           </div>
@@ -543,61 +739,65 @@ export default function FormConfigPage() {
           {/* Phần giới hạn theo tầng */}
           <div className="floor-limits-section">
             <div className="form-group">
-              <div className="checkbox-group">
-                <input
-                  type="checkbox"
-                  id="byFloor"
-                  name="byFloor"
-                  checked={formConfig.registrationLimit.byFloor}
-                  onChange={handleLimitChange}
-                  disabled={!formConfig.registrationLimit.enabled}
-                />
+              <div className="toggle-group">
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    id="byFloor"
+                    name="byFloor"
+                    checked={formConfig.registrationLimit.byFloor}
+                    onChange={handleLimitChange}
+                    disabled={!formConfig.registrationLimit.enabled}
+                  />
+                  <span className="slider"></span>
+                </label>
                 <label htmlFor="byFloor">Bật giới hạn đăng ký theo tầng</label>
               </div>
             </div>
             
-            {formConfig.registrationLimit.enabled && formConfig.registrationLimit.byFloor && formConfig.registrationLimit.floorLimits && (
-              <div className="floor-limits-container">
-                <h4>Giới hạn theo từng tầng</h4>
-                
-                {formConfig.registrationLimit.floorLimits.length > 0 ? (
-                  formConfig.registrationLimit.floorLimits.map((floorLimit, index) => (
-                    <div key={index} className="floor-limit-item">
-                      <div className="floor-limit-header">
-                        <span>{floorLimit.floorName}</span>
-                        <div className="checkbox-group">
-                          <input
-                            type="checkbox"
-                            id={`floor-${index}-enabled`}
-                            checked={floorLimit.enabled}
-                            onChange={(e) => handleFloorLimitChange(index, 'enabled', e.target.checked)}
-                          />
-                          <label htmlFor={`floor-${index}-enabled`}>Bật giới hạn</label>
-                        </div>
-                      </div>
-                      
-                      <div className="floor-limit-body">
-                        <div className="form-group">
-                          <label htmlFor={`floor-${index}-max`}>Số lượt đăng ký tối đa</label>
-                          <input
-                            type="number"
-                            id={`floor-${index}-max`}
-                            value={floorLimit.maxRegistrations}
-                            onChange={(e) => handleFloorLimitChange(index, 'maxRegistrations', e.target.value)}
-                            min="1"
-                            disabled={!floorLimit.enabled}
-                          />
-                        </div>
+            {/* Chỉ hiển thị phần giới hạn theo tầng khi cả hai checkbox đều được tích */}
+          {formConfig.registrationLimit.enabled && formConfig.registrationLimit.byFloor && formConfig.registrationLimit.floorLimits && (
+            <div className="floor-limits-container">
+              <h4>Giới hạn theo từng tầng</h4>
+              
+              {formConfig.registrationLimit.floorLimits.length > 0 ? (
+                formConfig.registrationLimit.floorLimits.map((floorLimit, index) => (
+                  <div key={index} className="floor-limit-item">
+                    <div className="floor-limit-header">
+                      <span>{floorLimit.floorName}</span>
+                      <div className="checkbox-group no-bg">
+                        <input
+                          type="checkbox"
+                          id={`floor-${index}-enabled`}
+                          checked={floorLimit.enabled}
+                          onChange={(e) => handleFloorLimitChange(index, 'enabled', e.target.checked)}
+                        />
+                        <label htmlFor={`floor-${index}-enabled`}>Bật giới hạn</label>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="no-floors-message">
-                    <p>Chưa có tầng nào được cấu hình. Vui lòng thêm các tầng trong tab "Cấu hình trường" ở trường "Chọn tầng".</p>
+                    
+                    <div className="floor-limit-body">
+                      <div className="form-group">
+                        <label htmlFor={`floor-${index}-max`}>Số lượt đăng ký tối đa</label>
+                        <input
+                          type="number"
+                          id={`floor-${index}-max`}
+                          value={floorLimit.maxRegistrations}
+                          onChange={(e) => handleFloorLimitChange(index, 'maxRegistrations', e.target.value)}
+                          min="1"
+                          disabled={!floorLimit.enabled}
+                        />
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                ))
+              ) : (
+                <div className="no-floors-message">
+                  <p>Chưa có tầng nào được cấu hình. Vui lòng thêm các tầng trong tab "Cấu hình trường" ở trường "Chọn tầng".</p>
+                </div>
+              )}
+            </div>
+          )}  
           </div>
           
           {/* Phần xem trước thông báo đã được xóa theo yêu cầu */}
@@ -743,6 +943,14 @@ export default function FormConfigPage() {
 
   return (
     <div className="container">
+      {/* Modal component cho thông báo */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={modalContent.title}
+        message={modalContent.message}
+        type={modalContent.type}
+      />
       <div className="form-header">
         <h1>Cấu hình form đăng ký</h1>
       </div>
@@ -783,9 +991,24 @@ export default function FormConfigPage() {
           </span>
         )}
         <button 
-          className="btn-save" 
+          className="btn" 
           onClick={saveFormConfig}
           disabled={saving}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FF9900'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1e2e3e'}
+          style={{
+            backgroundColor: '#1e2e3e',
+            color: 'white',
+            border: 'none',
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+            padding: '12px 30px',
+            height: '48px',
+            fontSize: '1rem',
+            borderRadius: '4px',
+            transition: 'all 0.3s ease',
+            minWidth: '160px'
+          }}
         >
           {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
         </button>

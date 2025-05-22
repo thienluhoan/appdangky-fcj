@@ -368,6 +368,100 @@ async function countFloorVisits(req, res) {
   }
 }
 
+// PATCH /api/visits/batch-update
+async function batchUpdateVisits(req, res) {
+  try {
+    const { ids, status } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Danh sách ID không hợp lệ' });
+    }
+    
+    if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
+      return res.status(400).json({ error: 'Trạng thái không hợp lệ' });
+    }
+    
+    console.log(`Batch updating visits with status: ${status} for IDs:`, ids);
+    
+    // Tìm các đăng ký trong database
+    const visits = await prisma.visit.findMany({
+      where: {
+        id: { in: ids }
+      }
+    });
+    
+    if (visits.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy đăng ký nào' });
+    }
+    
+    // Cập nhật trạng thái cho các đăng ký
+    const updatedVisits = await prisma.visit.updateMany({
+      where: {
+        id: { in: ids }
+      },
+      data: {
+        status: status
+        // Không sử dụng updatedAt vì không có trong schema
+      }
+    });
+    
+    // Emit socket.io event
+    if (req.io) {
+      req.io.emit('batchUpdateVisits', { ids, status });
+    } else if (global.io) {
+      global.io.emit('batch-update-registrations', { ids, status });
+    }
+    
+    // Gửi email thông báo cho từng đăng ký
+    if (status === 'approved' || status === 'rejected') {
+      console.log(`Bắt đầu gửi email ${status === 'approved' ? 'duyệt' : 'từ chối'} cho ${visits.length} đăng ký...`);
+      
+      // Gửi email trong background để không làm chậm API
+      setTimeout(async () => {
+        let emailsSent = 0;
+        
+        for (const visit of visits) {
+          if (visit.email && visit.email.includes('@')) {
+            try {
+              console.log(`Đang gửi email ${status === 'approved' ? 'duyệt' : 'từ chối'} đến ${visit.email}...`);
+              
+              let emailSent = false;
+              if (status === 'approved') {
+                emailSent = await sendApprovalEmail(visit);
+              } else {
+                emailSent = await sendRejectionEmail(visit);
+              }
+              
+              if (emailSent) {
+                emailsSent++;
+                console.log(`Gửi email thành công đến ${visit.email}`);
+              }
+            } catch (err) {
+              console.error(`Lỗi khi gửi email đến ${visit.email}:`, err.message);
+            }
+          } else {
+            console.log(`Email không hợp lệ hoặc không có cho đăng ký ${visit.id}: ${visit.email || 'không có'}`);
+          }
+        }
+        
+        console.log(`Đã gửi ${emailsSent}/${visits.length} email thông báo ${status === 'approved' ? 'duyệt' : 'từ chối'} thành công`);
+      }, 100);
+      
+      console.log('Đã khởi tạo quá trình gửi email trong background');
+    }
+    
+    console.log('Successfully batch updated visits:', updatedVisits.count);
+    res.json({ 
+      success: true, 
+      message: `Đã cập nhật ${updatedVisits.count} đăng ký thành công${(status === 'approved' || status === 'rejected') ? ' và đang gửi email thông báo' : ''}`, 
+      successCount: updatedVisits.count 
+    });
+  } catch (error) {
+    console.error('Lỗi khi cập nhật hàng loạt đăng ký:', error);
+    res.status(500).json({ error: 'Không thể cập nhật dữ liệu' });
+  }
+}
+
 module.exports = {
   getVisits,
   createVisit,
@@ -375,5 +469,6 @@ module.exports = {
   deleteVisit,
   batchDeleteVisits,
   countVisits,
-  countFloorVisits
+  countFloorVisits,
+  batchUpdateVisits
 };

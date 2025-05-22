@@ -1,4 +1,4 @@
-// File: /home/thienlh/dangkiFCJ/client-admin/src/app/api/form-config/route.ts
+// File: /home/thienlh/appdangky-fcj/client-admin/src/app/api/form-config/route.ts
 import * as entry from '../../../../../src/app/api/form-config/route.js'
 import type { NextRequest } from 'next/server.js'
 

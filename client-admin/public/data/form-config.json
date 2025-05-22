@@ -4,11 +4,11 @@
     "enabled": true,
     "maxRegistrationsPerDay": 2,
     "message": "Rất tiếc, số lượt đăng ký trong ngày hôm nay đã đạt giới hạn. Vui lòng thử lại vào ngày mai.",
-    "byFloor": true,
+    "byFloor": false,
     "floorLimits": [
       {
         "floorName": "Tầng 26",
-        "maxRegistrations": 1,
+        "maxRegistrations": 5,
         "enabled": true
       },
       {
@@ -83,5 +83,18 @@
       "enabled": true,
       "defaultValue": "09:00"
     }
+  },
+  "formSchedule": {
+    "enabled": true,
+    "openTime": "16:00",
+    "closeTime": "17:00",
+    "openDays": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "closedMessage": "Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa."
   }
 }

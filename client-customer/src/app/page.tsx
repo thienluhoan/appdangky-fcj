@@ -184,10 +184,26 @@ export default function RegisterPage(): React.ReactElement {
     }
   };
   
+  // Hàm kiểm tra trạng thái form (mở/đóng)
+  const checkFormStatus = async (): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/form-status');
+      if (response.ok) {
+        const data = await response.json();
+        return data.isOpen;
+      }
+      return true; // Mặc định cho phép đăng ký nếu không thể kiểm tra
+    } catch (error) {
+      console.error('Lỗi khi kiểm tra trạng thái form:', error);
+      return true; // Mặc định cho phép đăng ký nếu có lỗi
+    }
+  };
+
   // Hàm để kiểm tra số lượt đăng ký cho tầng cụ thể
-  const checkFloorRegistrationLimit = async (targetFloor = formData.floor, targetDate = formData.date) => {
+  const checkFloorRegistrationLimit = async (floor: string, date: string) => {
     try {
       // Nếu không có ngày đích, sử dụng ngày hiện tại
+      let targetDate = date;
       if (!targetDate) {
         // Sử dụng múi giờ địa phương thay vì UTC
         const now = new Date();
@@ -198,8 +214,8 @@ export default function RegisterPage(): React.ReactElement {
       }
       
       // Nếu không có tầng, không cần kiểm tra
+      let targetFloor = floor;
       if (!targetFloor) {
-        setFloorRegistrationsCount(0);
         setFloorLimitReached(false);
         return;
       }
@@ -390,6 +406,28 @@ export default function RegisterPage(): React.ReactElement {
     e.preventDefault();
     setLoading(true);
     setMessage('');
+    
+    // Kiểm tra trạng thái form (mở/đóng)
+    const isFormOpen = await checkFormStatus();
+    if (!isFormOpen) {
+      // Nếu form đã đóng, hiển thị trang form đóng
+      // Tạo một phần tử div để chứa trang form đóng
+      const formClosedContainer = document.createElement('div');
+      formClosedContainer.style.position = 'fixed';
+      formClosedContainer.style.top = '0';
+      formClosedContainer.style.left = '0';
+      formClosedContainer.style.width = '100%';
+      formClosedContainer.style.height = '100%';
+      formClosedContainer.style.zIndex = '9999';
+      formClosedContainer.style.backgroundColor = 'white';
+      
+      // Thêm phần tử vào body
+      document.body.appendChild(formClosedContainer);
+      
+      // Chuyển hướng đến trang chủ (sẽ hiển thị trang form đóng)
+      window.location.href = '/';
+      return;
+    }
     
     // Kiểm tra dữ liệu đầu vào
     if (!formData.name || !formData.email || !formData.phone || !formData.date || !formData.purpose) {
@@ -977,12 +1015,18 @@ export default function RegisterPage(): React.ReactElement {
                       );
                     })}
                   </select>
-                  {formData.floor && (
+                  {formData.floor && formConfig?.registrationLimit?.byFloor && (
                     <div className="floor-info">
-                      <span className={floorCounts[formData.floor] >= getFloorLimit(formData.floor) ? 'limit-reached' : ''}>
+                      <p style={{
+                        fontSize: '0.9rem',
+                        color: '#555',
+                        margin: '8px 0 12px 2px',
+                        fontStyle: 'italic',
+                        textAlign: 'left'
+                      }} className={floorCounts[formData.floor] >= getFloorLimit(formData.floor) ? 'limit-reached' : ''}>
                         Số lượng {formData.floor} còn trống: {Math.max(0, getFloorLimit(formData.floor) - (floorCounts[formData.floor] || 0))} chỗ
                         {floorCounts[formData.floor] >= getFloorLimit(formData.floor) ? ' - Đã đầy' : ''}
-                      </span>
+                      </p>
                     </div>
                   )}
                 </div>

@@ -218,7 +218,7 @@ async function sendRejectionEmail(visit) {
             </ul>
           </div>
           
-          <p>Lý do có thể bao gồm: số lượng đăng ký đã đạt giới hạn, thông tin không đầy đủ hoặc không chính xác, hoặc văn phòng không hoạt động vào ngày bạn đăng ký.</p>
+          <p>Lý do có thể bao gồm: Thông tin không đầy đủ hoặc không chính xác, hoặc văn phòng không hoạt động vào ngày bạn đăng ký.</p>
           <p>Bạn có thể thử đăng ký lại vào một ngày khác hoặc liên hệ với chúng tôi để biết thêm thông tin.</p>
           
           <p style="margin-top: 30px;">Trân trọng,</p>

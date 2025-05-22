@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { io } from 'socket.io-client';
+import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface Visit {
   id: string;
@@ -45,6 +47,27 @@ export default function ListPage(): React.ReactElement {
       document.head.removeChild(styleEl);
     };
   }, []);
+  
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState<boolean>(false);
+  
+  // Đóng menu dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isActionMenuOpen) {
+        const target = event.target as HTMLElement;
+        // Kiểm tra nếu click không phải vào menu dropdown hoặc nút action
+        if (!target.closest('.action-menu') && !target.closest('.action-button')) {
+          setIsActionMenuOpen(false);
+        }
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isActionMenuOpen]);
   const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -54,6 +77,21 @@ export default function ListPage(): React.ReactElement {
   const [dateFilter, setDateFilter] = useState<string>('all'); // all or a specific date
   const [selectedItems, setSelectedItems] = useState<string[]>([]); // Store selected item IDs
   const [selectAll, setSelectAll] = useState<boolean>(false); // Track if all items are selected
+  
+  // Action dropdown state
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [modalContent, setModalContent] = useState<{
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({ title: '', message: '', type: 'info' });
+  
+  // Confirm modal state
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
+  const [confirmAction, setConfirmAction] = useState<() => Promise<void>>(() => Promise.resolve());
+  const [confirmMessage, setConfirmMessage] = useState<string>('');
 
   // Removed edit functionality as requested
   
@@ -91,52 +129,270 @@ export default function ListPage(): React.ReactElement {
     });
   };
   
-  // Handle batch delete
-  const handleBatchDelete = async () => {
+  // Modal helper functions
+  const showModal = (title: string, message: string, type: 'success' | 'error' | 'info') => {
+    setModalContent({ title, message, type });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
+
+  // Confirm modal helper functions
+  const showConfirmModal = (message: string, action: () => Promise<void>) => {
+    setConfirmMessage(message);
+    setConfirmAction(() => action);
+    setIsConfirmModalOpen(true);
+  };
+
+  const closeConfirmModal = () => {
+    setIsConfirmModalOpen(false);
+  };
+  
+  // Handle batch approve
+  const handleBatchApprove = async () => {
+    console.log('handleBatchApprove called with items:', selectedItems);
+    
     if (selectedItems.length === 0) {
-      alert('Vui lòng chọn ít nhất một đăng ký để xóa');
+      // Hiển thị thông báo lỗi bằng modal
+      showModal(
+        'Cảnh báo',
+        'Vui lòng chọn ít nhất một đăng ký để duyệt',
+        'error'
+      );
       return;
     }
     
-    if (confirm(`Bạn có chắc chắn muốn xóa ${selectedItems.length} đăng ký đã chọn không?`)) {
-      try {
-        setLoading(true);
-        
-        // Sử dụng API endpoint mới để xóa hàng loạt
-        const response = await fetch('http://localhost:3000/api/visits/batch-delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ ids: selectedItems })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-          // Cập nhật UI
-          setVisits(prev => prev.filter(visit => !selectedItems.includes(visit.id)));
-          setSelectedItems([]);
-          setSelectAll(false);
+    // Tạo bản sao của selectedItems để tránh vấn đề với tham chiếu
+    const itemsToApprove = [...selectedItems];
+    console.log('Items to approve:', itemsToApprove);
+    
+    // Hiển thị hộp thoại xác nhận trước khi duyệt hàng loạt
+    showConfirmModal(
+      `Bạn có chắc chắn muốn duyệt ${itemsToApprove.length} đăng ký đã chọn không?`,
+      async () => {
+        try {
+          setLoading(true);
           
-          // Hiển thị thông báo
-          alert(result.message || `Đã xóa thành công ${result.deletedCount} đăng ký!`);
+          // Gọi API batch để duyệt tất cả các đăng ký cùng lúc
+          const response = await fetch('http://localhost:3000/api/visits/batch-update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ids: itemsToApprove,
+              status: 'approved'
+            }),
+          });
           
-          // Nếu có sự khác biệt giữa số lượng yêu cầu và số lượng đã xóa
-          if (result.deletedCount < result.totalRequested) {
-            console.warn(`Đã xóa ${result.deletedCount}/${result.totalRequested} đăng ký. Một số đăng ký có thể không tồn tại.`);
+          if (response.ok) {
+            const result = await response.json();
+            console.log('Batch approve result:', result);
+            
+            // Cập nhật UI
+            const updatedVisits = [...visits];
+            for (const id of itemsToApprove) {
+              const index = updatedVisits.findIndex(visit => visit.id === id);
+              if (index !== -1) {
+                updatedVisits[index] = { ...updatedVisits[index], status: 'approved' };
+              }
+            }
+            setVisits(updatedVisits);
+            
+            // Xóa các mục đã chọn
+            setSelectedItems([]);
+            setSelectAll(false);
+            
+            // Hiển thị thông báo kết quả
+            showModal(
+              'Thành công',
+              `Đã duyệt thành công ${result.successCount || itemsToApprove.length} đăng ký!`,
+              'success'
+            );
+          } else {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Lỗi khi duyệt đăng ký');
           }
-        } else {
-          throw new Error(result.error || 'Không thể xóa đăng ký');
+          
+          // Cập nhật lại danh sách từ server
+          fetchVisits();
+          
+        } catch (error) {
+          console.error('Error in batch approve:', error);
+          showModal(
+            'Lỗi',
+            'Có lỗi xảy ra khi duyệt đăng ký. Vui lòng thử lại sau.',
+            'error'
+          );
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error in batch delete:', error);
-        alert('Có lỗi xảy ra khi xóa đăng ký. Vui lòng thử lại sau.');
-      } finally {
-        setLoading(false);
       }
-    }
+    );
   };
+
+  // Handle batch reject
+  const handleBatchReject = async () => {
+    console.log('handleBatchReject called with items:', selectedItems);
+    
+    if (selectedItems.length === 0) {
+      // Hiển thị thông báo lỗi bằng modal
+      showModal(
+        'Cảnh báo',
+        'Vui lòng chọn ít nhất một đăng ký để từ chối',
+        'error'
+      );
+      return;
+    }
+    
+    // Tạo bản sao của selectedItems để tránh vấn đề với tham chiếu
+    const itemsToReject = [...selectedItems];
+    console.log('Items to reject:', itemsToReject);
+    
+    // Hiển thị hộp thoại xác nhận trước khi từ chối hàng loạt
+    showConfirmModal(
+      `Bạn có chắc chắn muốn từ chối ${itemsToReject.length} đăng ký đã chọn không?`,
+      async () => {
+        try {
+          setLoading(true);
+          
+          // Gọi API batch để từ chối tất cả các đăng ký cùng lúc
+          const response = await fetch('http://localhost:3000/api/visits/batch-update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ids: itemsToReject,
+              status: 'rejected'
+            }),
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log('Batch reject result:', result);
+            
+            // Cập nhật UI
+            const updatedVisits = [...visits];
+            for (const id of itemsToReject) {
+              const index = updatedVisits.findIndex(visit => visit.id === id);
+              if (index !== -1) {
+                updatedVisits[index] = { ...updatedVisits[index], status: 'rejected' };
+              }
+            }
+            setVisits(updatedVisits);
+            
+            // Xóa các mục đã chọn
+            setSelectedItems([]);
+            setSelectAll(false);
+            
+            // Hiển thị thông báo kết quả
+            showModal(
+              'Thành công',
+              `Đã từ chối thành công ${result.successCount || itemsToReject.length} đăng ký!`,
+              'success'
+            );
+          } else {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Lỗi khi từ chối đăng ký');
+          }
+          
+          // Cập nhật lại danh sách từ server
+          fetchVisits();
+          
+        } catch (error) {
+          console.error('Error in batch reject:', error);
+          showModal(
+            'Lỗi',
+            'Có lỗi xảy ra khi từ chối đăng ký. Vui lòng thử lại sau.',
+            'error'
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
+  };
+
+  // Handle batch delete
+  const handleBatchDelete = async () => {
+    console.log('handleBatchDelete called with items:', selectedItems);
+    
+    if (selectedItems.length === 0) {
+      // Hiển thị thông báo lỗi bằng modal
+      showModal(
+        'Cảnh báo',
+        'Vui lòng chọn ít nhất một đăng ký để xóa',
+        'error'
+      );
+      return;
+    }
+    
+    // Tạo bản sao của selectedItems để tránh vấn đề với tham chiếu
+    const itemsToDelete = [...selectedItems];
+    console.log('Items to delete:', itemsToDelete);
+    
+    // Hiển thị hộp thoại xác nhận trước khi xóa
+    showConfirmModal(
+      `Bạn có chắc chắn muốn xóa ${itemsToDelete.length} đăng ký đã chọn không?`,
+      async () => {
+        try {
+          setLoading(true);
+          
+          // Gọi API batch để xóa tất cả các đăng ký cùng lúc
+          const response = await fetch('http://localhost:3000/api/visits/batch-delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ids: itemsToDelete
+            }),
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log('Batch delete result:', result);
+            
+            // Cập nhật UI
+            const updatedVisits = visits.filter(visit => !itemsToDelete.includes(visit.id));
+            setVisits(updatedVisits);
+            
+            // Xóa các mục đã chọn
+            setSelectedItems([]);
+            setSelectAll(false);
+            
+            // Hiển thị thông báo kết quả
+            showModal(
+              'Thành công',
+              `Đã xóa thành công ${result.successCount || itemsToDelete.length} đăng ký!`,
+              'success'
+            );
+          } else {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Lỗi khi xóa đăng ký');
+          }
+          
+          // Cập nhật lại danh sách từ server
+          fetchVisits();
+          
+        } catch (error) {
+          console.error('Error in batch delete:', error);
+          showModal(
+            'Lỗi',
+            'Có lỗi xảy ra khi xóa đăng ký. Vui lòng thử lại sau.',
+            'error'
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
+  };
+  
+
   
   // Hàm xuất danh sách đăng ký đã được duyệt ra file CSV
   const exportApprovedList = () => {
@@ -144,7 +400,12 @@ export default function ListPage(): React.ReactElement {
     const approvedVisits = visits.filter(visit => visit.status === 'approved');
     
     if (approvedVisits.length === 0) {
-      alert('Không có đăng ký nào đã được duyệt để xuất');
+      // Hiển thị thông báo bằng modal thay vì alert
+      showModal(
+        'Thông báo', 
+        'Không có đăng ký nào đã được duyệt để xuất',
+        'info'
+      );
       return;
     }
     
@@ -218,34 +479,49 @@ export default function ListPage(): React.ReactElement {
   };
   
   const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa đăng ký này không?')) {
-      try {
-        setLoading(true);
-        console.log('Deleting visit with ID:', id);
-        
-        // Gọi API để xóa dữ liệu trên server
-        const response = await fetch(`http://localhost:3000/api/visits/${id}`, {
-          method: 'DELETE'
-        });
-        
-        console.log('Delete response status:', response.status);
-        
-        // Xử lý kết quả thành công
-        if (response.ok) {
-          // Cập nhật state để xóa đăng ký khỏi UI
-          setVisits(prev => prev.filter(visit => visit.id !== id));
-          alert('Đã xóa đăng ký thành công!');
-        } else {
-          const errorText = await response.text();
-          throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
+    // Hiển thị hộp thoại xác nhận trước khi xóa
+    showConfirmModal(
+      'Bạn có chắc chắn muốn xóa đăng ký này không?',
+      async () => {
+        try {
+          setLoading(true);
+          console.log('Deleting visit with ID:', id);
+          
+          // Gọi API để xóa dữ liệu trên server
+          const response = await fetch(`http://localhost:3000/api/visits/${id}`, {
+            method: 'DELETE'
+          });
+          
+          console.log('Delete response status:', response.status);
+          
+          // Xử lý kết quả thành công
+          if (response.ok) {
+            // Cập nhật state để xóa đăng ký khỏi UI
+            setVisits(prev => prev.filter(visit => visit.id !== id));
+            // Hiển thị thông báo thành công bằng modal
+            showModal(
+              'Thành công',
+              'Đã xóa đăng ký thành công!',
+              'success'
+            );
+          } else {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
+          }
+        } catch (error) {
+          console.error('Error deleting visit:', error);
+          setError('Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'));
+          // Hiển thị thông báo lỗi bằng modal
+          showModal(
+            'Lỗi',
+            'Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'),
+            'error'
+          );
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error deleting visit:', error);
-        setError('Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'));
-      } finally {
-        setLoading(false);
       }
-    }
+    );
   };
 
   const fetchVisits = async (): Promise<void> => {
@@ -418,38 +694,57 @@ export default function ListPage(): React.ReactElement {
   };
 
   const updateVisitStatus = async (id: string, status: 'pending' | 'approved' | 'rejected'): Promise<void> => {
-    try {
-      setLoading(true);
-      console.log('Updating visit status via socket.io:', id, status);
-      
-      if (!socket) {
-        throw new Error('Socket connection not established');
+    // Xác định hành động và thông báo xác nhận
+    const action = status === 'approved' ? 'duyệt' : 'từ chối';
+    const confirmMessage = `Bạn có chắc chắn muốn ${action} đăng ký này không?`;
+    
+    // Hiển thị hộp thoại xác nhận trước khi thực hiện hành động
+    showConfirmModal(
+      confirmMessage,
+      async () => {
+        try {
+          setLoading(true);
+          console.log('Updating visit status via socket.io:', id, status);
+          
+          if (!socket) {
+            throw new Error('Socket connection not established');
+          }
+          
+          // Sử dụng socket.io để gửi yêu cầu cập nhật trạng thái
+          if (status === 'approved') {
+            console.log('Gửi yêu cầu duyệt đăng ký với ID:', id);
+            socket.emit('approveVisit', { id: id });
+          } else if (status === 'rejected') {
+            console.log('Gửi yêu cầu từ chối đăng ký với ID:', id);
+            socket.emit('rejectVisit', { id: id });
+          }
+          
+          // Cập nhật UI ngay lập tức để phản hồi nhanh cho người dùng
+          setVisits(prev => prev.map(visit => 
+            visit.id === id ? { ...visit, status } : visit
+          ));
+          
+          // Hiển thị thông báo thành công bằng modal thay vì alert
+          const foundVisit = visits.find(visit => visit.id === id);
+          showModal(
+            'Thành công', 
+            `Đã ${action} đăng ký thành công! ${foundVisit ? `Email thông báo đã được gửi đến ${foundVisit.email}` : ''}`,
+            'success'
+          );
+        } catch (err) {
+          console.error('Error updating visit status:', err);
+          setError(`Lỗi khi cập nhật trạng thái: ${err instanceof Error ? err.message : 'Không xác định'}`);
+          // Hiển thị lỗi bằng modal
+          showModal(
+            'Lỗi', 
+            `Lỗi khi cập nhật trạng thái: ${err instanceof Error ? err.message : 'Không xác định'}`,
+            'error'
+          );
+        } finally {
+          setLoading(false);
+        }
       }
-      
-      // Sử dụng socket.io để gửi yêu cầu cập nhật trạng thái
-      if (status === 'approved') {
-        console.log('Gửi yêu cầu duyệt đăng ký với ID:', id);
-        socket.emit('approveVisit', { id: id });
-      } else if (status === 'rejected') {
-        console.log('Gửi yêu cầu từ chối đăng ký với ID:', id);
-        socket.emit('rejectVisit', { id: id });
-      }
-      
-      // Cập nhật UI ngay lập tức để phản hồi nhanh cho người dùng
-      setVisits(prev => prev.map(visit => 
-        visit.id === id ? { ...visit, status } : visit
-      ));
-      
-      // Hiển thị thông báo thành công
-      const action = status === 'approved' ? 'duyệt' : 'từ chối';
-      const foundVisit = visits.find(visit => visit.id === id);
-      alert(`Đã ${action} đăng ký thành công! ${foundVisit ? `Email thông báo đã được gửi đến ${foundVisit.email}` : ''}`);
-    } catch (err) {
-      console.error('Error updating visit status:', err);
-      setError(`Lỗi khi cập nhật trạng thái: ${err instanceof Error ? err.message : 'Không xác định'}`);
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   // Get unique dates from visits for the date filter - using createdAt instead of date
@@ -528,6 +823,23 @@ export default function ListPage(): React.ReactElement {
 
   return (
     <>
+      {/* Modal component cho thông báo */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={modalContent.title}
+        message={modalContent.message}
+        type={modalContent.type}
+      />
+      
+      {/* Confirm Modal component cho xác nhận */}
+      <ConfirmModal
+        isOpen={isConfirmModalOpen}
+        onClose={closeConfirmModal}
+        onConfirm={confirmAction}
+        message={confirmMessage}
+      />
+      
       {/* Global styles for the entire application */}
       <style jsx global>{`
         .list-page-container {
@@ -632,7 +944,6 @@ export default function ListPage(): React.ReactElement {
         }
         
         .action-button:hover {
-          transform: scale(1.2);
           background-color: rgba(0,0,0,0.05);
         }
         
@@ -741,7 +1052,7 @@ export default function ListPage(): React.ReactElement {
           }}>
             <input 
               type="text" 
-              placeholder="Tìm kiếm theo tên, sĐT, email, trường, tầng, mục đích..." 
+              placeholder="Tìm kiếm theo tên, số điện thoại, email, trường, tầng, mục đích..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -1003,51 +1314,154 @@ export default function ListPage(): React.ReactElement {
             </div>
             
             
-            <button 
-              style={{ 
-                padding: '8px 15px', 
-                backgroundColor: selectedItems.length > 0 ? '#dc3545' : '#f8d7da', 
-                color: selectedItems.length > 0 ? 'white' : '#721c24', 
-                border: selectedItems.length > 0 ? 'none' : '1px solid #f5c6cb', 
-                borderRadius: '4px',
-                cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: '0.3s',
-                minWidth: '150px',
-                height: '40px',
-                boxShadow: selectedItems.length > 0 ? '0 2px 4px rgba(220, 53, 69, 0.3)' : 'none',
-                marginRight: '10px',
-                fontWeight: 'bold',
-                fontSize: '14px',
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-              onMouseOver={(e) => {
-                if (selectedItems.length > 0) {
-                  e.currentTarget.style.backgroundColor = '#c82333';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(220, 53, 69, 0.4)';
-                }
-              }}
-              onMouseOut={(e) => {
-                if (selectedItems.length > 0) {
-                  e.currentTarget.style.backgroundColor = '#dc3545';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(220, 53, 69, 0.3)';
-                }
-              }}
-              onClick={handleBatchDelete}
-              disabled={selectedItems.length === 0}
-              title={selectedItems.length === 0 ? 'Chọn ít nhất một đăng ký để xóa' : `Xóa ${selectedItems.length} đăng ký đã chọn`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
-              Xóa đã chọn ({selectedItems.length})
-            </button>
+            <div style={{ position: 'relative', marginRight: '10px' }}>
+              <button 
+                className="action-button"
+                style={{ 
+                  padding: '8px 15px', 
+                  backgroundColor: selectedItems.length > 0 ? '#1e2e3e' : '#e0e0e0', 
+                  color: selectedItems.length > 0 ? 'white' : '#888', 
+                  border: 'none', 
+                  borderRadius: '4px',
+                  cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: '0.3s',
+                  minWidth: '150px',
+                  height: '40px',
+                  boxShadow: selectedItems.length > 0 ? '0 2px 4px rgba(30, 46, 62, 0.3)' : 'none',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onMouseOver={(e) => {
+                  if (selectedItems.length > 0) {
+                    e.currentTarget.style.backgroundColor = '#162536';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(30, 46, 62, 0.4)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (selectedItems.length > 0) {
+                    e.currentTarget.style.backgroundColor = '#1e2e3e';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(30, 46, 62, 0.3)';
+                  }
+                }}
+                onClick={() => {
+                  if (selectedItems.length > 0) {
+                    setIsActionMenuOpen(!isActionMenuOpen);
+                  }
+                }}
+                disabled={selectedItems.length === 0}
+                title={selectedItems.length === 0 ? 'Chọn ít nhất một đăng ký để thực hiện hành động' : `Thực hiện hành động với ${selectedItems.length} đăng ký đã chọn`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                  <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                  <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+                Action ({selectedItems.length})
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              
+              {isActionMenuOpen && selectedItems.length > 0 && (
+                <div 
+                  className="action-menu"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: '0',
+                    backgroundColor: 'white',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                    borderRadius: '4px',
+                    zIndex: 1000,
+                    marginTop: '5px',
+                    width: '200px'
+                  }}>
+                  <div 
+                    style={{
+                      padding: '10px 15px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsActionMenuOpen(false);
+                      console.log('Approving items:', selectedItems);
+                      handleBatchApprove();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#28a745" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '10px' }}>
+                      <path d="M20 6L9 17l-5-5"></path>
+                    </svg>
+                    Duyệt đã chọn
+                  </div>
+                  
+                  <div 
+                    style={{
+                      padding: '10px 15px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsActionMenuOpen(false);
+                      console.log('Rejecting items:', selectedItems);
+                      handleBatchReject();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc3545" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '10px' }}>
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    Từ chối đã chọn
+                  </div>
+                  
+                  <div 
+                    style={{
+                      padding: '10px 15px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsActionMenuOpen(false);
+                      console.log('Deleting items:', selectedItems);
+                      handleBatchDelete();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc3545" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '10px' }}>
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                    Xóa đã chọn
+                  </div>
+                </div>
+              )}
+            </div>
             
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
@@ -1114,9 +1528,9 @@ export default function ListPage(): React.ReactElement {
                 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 0 1-9 9c-4.97 0-9-4.03-9-9s4.03-9 9-9h.17"></path>
-                  <path d="M21 3v6h-6"></path>
-                  <path d="M16 8l5-5"></path>
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
                 Làm mới
               </button>

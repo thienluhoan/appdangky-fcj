@@ -1,4 +1,4 @@
-// File: /home/thienlh/dangkiFCJ/client-admin/src/app/form/page.tsx
+// File: /home/thienlh/appdangky-fcj/client-admin/src/app/form/page.tsx
 import * as entry from '../../../../src/app/form/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

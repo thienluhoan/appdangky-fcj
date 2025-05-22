@@ -17,6 +17,9 @@ router.get('/count-floor', visitController.countFloorVisits);
 // API endpoint để xóa hàng loạt đăng ký
 router.post('/batch-delete', visitController.batchDeleteVisits);
 
+// API endpoint để cập nhật hàng loạt đăng ký
+router.post('/batch-update', visitController.batchUpdateVisits);
+
 // Giữ lại API cũ để tương thích ngược
 router.put('/:id', visitController.updateVisitStatus);
 

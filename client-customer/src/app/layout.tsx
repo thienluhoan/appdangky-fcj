@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import './globals.css';
 import Logo from './components/Logo';
+import FormStatusChecker from './components/FormStatusChecker';
 
 export const metadata: Metadata = {
   title: 'Đăng Ký Văn Phòng',
@@ -13,9 +14,11 @@ interface RootLayoutProps {
 }
 
 export default function RootLayout({ children }: RootLayoutProps): React.ReactElement {
+  // Xử lý lỗi cz-shortcut-listen
+  const bodyProps = { suppressHydrationWarning: true };
   return (
     <html lang="vi">
-      <body>
+      <body {...bodyProps}>
         <header style={{ 
           background: '#1e2e3e',
           color: 'white',
@@ -54,7 +57,9 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
         </header>
         <div style={{ paddingTop: '70px' }}>
           <main className="container">
-            {children}
+            <FormStatusChecker>
+              {children}
+            </FormStatusChecker>
           </main>
         </div>
       </body>
