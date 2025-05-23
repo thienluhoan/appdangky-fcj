@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
 
 // Hàm kiểm tra xem form có đang mở hay không dựa trên thời gian hiện tại
-function isFormOpen(formSchedule: any): { isOpen: boolean; message: string } {
+function isFormOpen(formConfig: any): { isOpen: boolean; message: string } {
+  // Kiểm tra trạng thái đóng form thủ công trước tiên
+  if (formConfig.isFormClosed) {
+    return { 
+      isOpen: false, 
+      message: formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.'
+    };
+  }
+
   // Nếu không có cấu hình lịch trình hoặc tính năng không được bật
+  const formSchedule = formConfig.formSchedule;
   if (!formSchedule || !formSchedule.enabled) {
     return { isOpen: true, message: '' };
   }
@@ -53,7 +62,8 @@ export async function GET() {
     }
 
     const formConfig = await response.json();
-    const formStatus = isFormOpen(formConfig.formSchedule);
+    // Truyền toàn bộ formConfig để có thể kiểm tra cả isFormClosed và formSchedule
+    const formStatus = isFormOpen(formConfig);
 
     return NextResponse.json(formStatus);
   } catch (error) {

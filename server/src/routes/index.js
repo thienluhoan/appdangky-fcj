@@ -7,6 +7,7 @@ const formConfigRoutes = require('./formConfigRoutes');
 const configNotifyRoutes = require('./configNotifyRoutes');
 const emailConfigRoutes = require('./emailConfigRoutes');
 const userRoutes = require('./userRoutes');
+const formStatusRoutes = require('./form-status');
 
 // Sử dụng các routes con
 router.use('/visits', visitRoutes);
@@ -16,5 +17,6 @@ router.use('/email-config', emailConfigRoutes); // Thêm route cho cấu hình e
 router.use('/users', userRoutes); // Thêm route cho người dùng
 router.use('/', formConfigRoutes); // Thêm route cho form-config
 router.use('/', configNotifyRoutes); // Thêm route cho thông báo cập nhật cấu hình
+router.use('/form-status', formStatusRoutes); // Thêm route cho trạng thái form
 
 module.exports = router;

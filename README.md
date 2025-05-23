@@ -1,6 +1,8 @@
 # Hệ Thống Đăng Ký Văn Phòng
 
-Hệ thống quản lý và đăng ký lịch lên văn phòng với giao diện người dùng thân thiện, hỗ trợ chế độ sáng/tối, và tích hợp thông báo thời gian thực.
+# Hệ thống quản lý và đăng ký lịch lên văn phòng FCJ
+
+Hệ thống quản lý và đăng ký lịch lên văn phòng với giao diện người dùng thân thiện, hỗ trợ chế độ sáng/tối, tích hợp thông báo thời gian thực và gửi email tự động.
 
 ## Cấu trúc dự án
 
@@ -52,20 +54,20 @@ Hệ thống được xây dựng với các công nghệ hiện đại như Rea
 Hệ thống được xây dựng với kiến trúc client-server:
 
 ```
-┌─────────────────┐     ┌────────────────────┐     ┌─────────────────┐
+┬───────────────┬     ┬──────────────────┬     ┬───────────────┬
 │                 │     │                    │     │                 │
-│  Client-Admin   │◄────┤    API Server      │◄────┤ Client-Customer │
+│  Client-Admin   │◄────│    API Server      │◄────│ Client-Customer │
 │  (Next.js)      │     │  (Node.js/Express) │     │  (Next.js)      │
 │                 │     │                    │     │                 │
-└─────────────────┘     └────────────────────┘     └─────────────────┘
+└───────────────┘     └──────────────────┘     └───────────────┘
                               │
                               │
-                              ▼
-                        ┌─────────────────┐
+                              ┴
+                        ┬───────────────┬
                         │                 │
-                        │   JSON Storage  │
-                        │                 │
-                        └─────────────────┘
+                        │   PostgreSQL    │
+                        │   (via Prisma)  │
+                        └───────────────┘
 ```
 
 ### Công Nghệ Sử Dụng
@@ -81,7 +83,9 @@ Hệ thống được xây dựng với kiến trúc client-server:
   - Node.js
   - Express.js
   - Socket.IO
-  - JSON file storage (có thể mở rộng lên database)
+  - Prisma ORM
+  - PostgreSQL Database
+  - Nodemailer (gửi email)
 
 ## Cài Đặt
 
@@ -126,6 +130,8 @@ Tạo file `.env` trong thư mục `server` với nội dung:
 PORT=3000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:3001,http://localhost:3002
+DATABASE_URL=postgresql://username:password@localhost:5432/appdangky
+JWT_SECRET=your_jwt_secret_key
 ```
 
 ### Cấu Hình Client Admin
@@ -189,7 +195,13 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3000
    - Đăng nhập vào hệ thống quản trị
    - Xem danh sách đăng ký
    - Phê duyệt hoặc từ chối các yêu cầu
+   - Gửi email thông báo tự động đến người đăng ký
    - Quản lý và theo dõi việc sử dụng văn phòng
+
+3. **Cấu hình Email** (Client Admin):
+   - Cấu hình SMTP server cho tài khoản admin
+   - Kiểm tra kết nối email
+   - Tùy chỉnh email gửi đi theo từng admin
 
 ## API Documentation
 
@@ -200,11 +212,19 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3000
 - `GET /api/visits`: Lấy danh sách đăng ký
 - `POST /api/visits`: Tạo đăng ký mới
 - `PUT /api/visits/:id`: Cập nhật trạng thái đăng ký
+- `POST /api/visits/batch-update`: Cập nhật hàng loạt trạng thái đăng ký
 - `DELETE /api/visits/:id`: Xóa đăng ký
 
 #### Xác Thực
 
-- `POST /api/login`: Đăng nhập hệ thống quản trị
+- `POST /api/auth/login`: Đăng nhập hệ thống quản trị
+- `GET /api/auth/verify`: Kiểm tra token JWT
+
+#### Cấu hình Email
+
+- `GET /api/email-config`: Lấy cấu hình email của admin
+- `POST /api/email-config`: Cập nhật cấu hình email
+- `POST /api/email-config/test`: Kiểm tra kết nối email
 
 ### Ví Dụ API
 
@@ -237,11 +257,15 @@ fetch('http://localhost:3000/api/visits', {
 
 ### Xác Thực
 
-Hệ thống sử dụng xác thực đơn giản với email và mật khẩu cho giao diện quản trị. Trong môi trường sản xuất, nên nâng cấp lên các phương pháp xác thực mạnh hơn như JWT hoặc OAuth.
+Hệ thống sử dụng JWT (JSON Web Tokens) để xác thực người dùng trong giao diện quản trị. Token được lưu trữ trong cookie với thuộc tính httpOnly để tăng cường bảo mật.
 
 ### Lưu Trữ Dữ Liệu
 
-Dữ liệu được lưu trữ dưới dạng file JSON. Trong môi trường sản xuất, nên sử dụng cơ sở dữ liệu an toàn như MongoDB, PostgreSQL hoặc MySQL.
+Dữ liệu được lưu trữ trong cơ sở dữ liệu PostgreSQL và được quản lý thông qua Prisma ORM. Điều này đảm bảo tính toàn vẹn dữ liệu và khả năng mở rộng của hệ thống.
+
+### Gửi Email
+
+Hệ thống sử dụng Nodemailer để gửi email thông báo. Mỗi admin có thể cấu hình SMTP riêng để gửi email từ tài khoản của họ.
 
 ## Đóng Góp
 

@@ -97,10 +97,9 @@ export default function LoginPage(): React.ReactElement {
           localStorage.setItem('userData', JSON.stringify(userData));
         }
         
-        router.push('/');
-        setTimeout(() => {
-          window.location.reload();
-        }, 200);
+        // Sử dụng window.location.href thay vì router.push để đảm bảo chuyển hướng hoàn toàn
+        // và tránh vấn đề với client-side routing của Next.js
+        window.location.href = '/';
       } else {
         setError(data.error || 'Đăng nhập thất bại')
         setLoading(false)

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Logo from './components/Logo';
 import FormStatusChecker from './components/FormStatusChecker';
+import ClickableLogo from './components/ClickableLogo';
 
 export const metadata: Metadata = {
   title: 'Đăng Ký Văn Phòng',
@@ -43,15 +44,11 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
             maxWidth: '1200px',
             margin: '0 auto'
           }}>
-            <img 
-              src="/img/FCJ-logo.png" 
-              alt="First Cloud Journey Logo" 
-              style={{ 
-                height: '50px', 
-                width: 'auto',
-                objectFit: 'contain',
-                verticalAlign: 'middle',
-              }} 
+            <ClickableLogo
+              src="/img/FCJ-logo.png"
+              alt="First Cloud Journey Logo"
+              height="50px"
+              width="auto"
             />
           </div>
         </header>

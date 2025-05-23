@@ -139,8 +139,13 @@ export async function POST(request: NextRequest) {
         console.log('Form config synced with server successfully to:', serverConfigFilePath);
         
         // Gửi yêu cầu đến server để thông báo cập nhật cấu hình
+        // Sử dụng Promise.race với timeout để tránh chờ quá lâu
         try {
-          const notifyResponse = await fetch('http://localhost:3000/api/notify-config-update', {
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout')), 2000); // Timeout sau 2 giây
+          });
+          
+          const fetchPromise = fetch('http://localhost:3000/api/notify-config-update', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -148,13 +153,17 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({ timestamp: new Date().toISOString() }),
           });
           
+          const notifyResponse = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+          
           if (notifyResponse.ok) {
             console.log('Notification sent to server successfully');
           } else {
             console.error('Failed to send notification to server:', await notifyResponse.text());
           }
         } catch (notifyError) {
+          // Chỉ ghi log lỗi, không ảnh hưởng đến việc lưu cấu hình
           console.error('Error sending notification to server:', notifyError);
+          // Không cần trả về lỗi, vì đây chỉ là thông báo phụ
         }
       } catch (serverWriteError) {
         console.error('Error syncing with server:', serverWriteError);

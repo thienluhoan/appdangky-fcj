@@ -1,0 +1,49 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Output build
+.next/
+out/
+dist/
+build/
+
+# Local env files
+.env*
+!.env.example
+
+# Vercel / Netlify / etc.
+.vercel/
+.netlify/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Log files
+logs
+*.log
+
+# Dependency directories (if using monorepo style)
+client/node_modules/
+admin/node_modules/
+server/node_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional: ignore compiled DB files or data
+server/data/*.db
+server/data/*.sqlite
+server/database/*.db
+
+# Ignore next image optimization cache
+public/images/cache/

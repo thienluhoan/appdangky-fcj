@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import './styles.css';
 import './form-schedule.css';
+import './time-picker.css';
+import './switch-toggle.css';
 import Modal from '../components/Modal';
 import CustomTimePicker from '../components/CustomTimePicker';
+import { toast } from 'react-toastify';
 
 // Định nghĩa kiểu dữ liệu cho cấu hình form
 interface FieldConfig {
@@ -55,6 +58,10 @@ export default function FormConfigPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'fields' | 'limits'>('general');
+  const [isToggling, setIsToggling] = useState<boolean>(false); // Trạng thái khi đang toggle
+  
+  // Sử dụng useRef để lưu timeout cho debounce
+  const toggleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -124,14 +131,35 @@ export default function FormConfigPage() {
     setActiveTab(tab);
   };
 
-  // Tải cấu hình form từ API
+  // Tải cấu hình form từ API và đồng bộ với trạng thái form thực tế
   useEffect(() => {
-    const fetchFormConfig = async () => {
+    const fetchFormConfigAndStatus = async () => {
       try {
-        const response = await fetch('/api/form-config');
-        if (response.ok) {
-          const data = await response.json();
-          setFormConfig(data);
+        // 1. Lấy cấu hình form từ API form-config
+        const configResponse = await fetch('/api/form-config');
+        
+        // 2. Đồng thời lấy trạng thái form hiện tại từ API form-status
+        const statusResponse = await fetch('http://localhost:3000/api/form-status');
+        
+        if (configResponse.ok && statusResponse.ok) {
+          const configData = await configResponse.json();
+          const statusData = await statusResponse.json();
+          
+          // Đồng bộ trạng thái form từ API form-status với cấu hình form
+          // isOpen = true tương ứng với isFormClosed = false và ngược lại
+          const formConfig = {
+            ...configData,
+            isFormClosed: !statusData.isOpen
+          };
+          
+          // Cập nhật state với dữ liệu đã được đồng bộ
+          setFormConfig(formConfig);
+          console.log('Trạng thái form đã được đồng bộ:', statusData.isOpen ? 'Mở' : 'Đóng');
+        } else if (configResponse.ok) {
+          // Nếu chỉ lấy được cấu hình form mà không lấy được trạng thái
+          const configData = await configResponse.json();
+          setFormConfig(configData);
+          console.warn('Không thể đồng bộ trạng thái form, sử dụng trạng thái từ cấu hình');
         } else {
           setMessage({
             text: 'Không thể tải cấu hình form',
@@ -149,47 +177,75 @@ export default function FormConfigPage() {
       }
     };
 
-    fetchFormConfig();
+    fetchFormConfigAndStatus();
   }, []);
 
-  // Lưu cấu hình form
+  // Lưu cấu hình form - HOÀN TOÀN TÁCH BIỆT với trạng thái form
   const saveFormConfig = async () => {
     if (!formConfig) return;
 
+    // Lưu trạng thái đóng/mở form hiện tại
+    const currentFormClosedState = formConfig.isFormClosed;
+
     setSaving(true);
     try {
+      // Tạo bản sao của formConfig và LOẠI BỎ trạng thái isFormClosed
+      // Điều này đảm bảo nút "Lưu cấu hình" không lưu trạng thái form
+      const { isFormClosed, ...configWithoutFormStatus } = formConfig;
+      
+      // Gửi cấu hình form đến server (không bao gồm trạng thái form)
       const response = await fetch('/api/form-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formConfig),
+        body: JSON.stringify({
+          ...configWithoutFormStatus,
+          isFormClosed: currentFormClosedState // Gửi lại trạng thái ban đầu, không thay đổi
+        }),
       });
 
       if (response.ok) {
-        // Chỉ hiển thị thông báo thành công bằng modal, không hiển thị text
-        showModal(
-          'Thành công', 
-          'Đã lưu cấu hình form thành công', 
-          'success'
-        );
+        // Sử dụng toast thay vì modal để hiển thị thông báo thành công
+        toast.success('Đã lưu cấu hình form thành công', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        
+        // Đảm bảo trạng thái form không bị thay đổi sau khi lưu cấu hình
+        if (formConfig.isFormClosed !== currentFormClosedState) {
+          setFormConfig({
+            ...formConfig,
+            isFormClosed: currentFormClosedState
+          });
+        }
       } else {
         const errorData = await response.json();
-        // Chỉ hiển thị thông báo lỗi bằng modal, không hiển thị text
-        showModal(
-          'Lỗi', 
-          errorData.message || 'Lỗi khi lưu cấu hình form', 
-          'error'
-        );
+        // Sử dụng toast.error thay vì modal để hiển thị thông báo lỗi
+        toast.error(errorData.message || 'Lỗi khi lưu cấu hình form', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
       }
     } catch (error) {
       console.error('Lỗi khi lưu cấu hình form:', error);
-      // Chỉ hiển thị thông báo lỗi bằng modal, không hiển thị text
-      showModal(
-        'Lỗi', 
-        'Lỗi khi lưu cấu hình form', 
-        'error'
-      );
+      // Sử dụng toast.error thay vì modal để hiển thị thông báo lỗi
+      toast.error('Lỗi khi lưu cấu hình form', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setSaving(false);
     }
@@ -272,25 +328,104 @@ export default function FormConfigPage() {
     });
   };
 
-  // Xử lý đóng/mở form
+  // Biến để theo dõi thời gian cuối cùng toggle nút
+  const lastToggleTimeRef = useRef<number>(0);
+  
+  // Xử lý đóng/mở form với debounce mạnh hơn - hoàn toàn độc lập với nút "Lưu cấu hình"
   const handleToggleFormClosed = () => {
-    if (!formConfig) return;
-
-    const newIsFormClosed = !formConfig.isFormClosed;
+    // Kiểm tra điều kiện để tránh spam
+    const now = Date.now();
+    const timeSinceLastToggle = now - lastToggleTimeRef.current;
     
+    // Nếu đang trong quá trình toggle hoặc thời gian giữa 2 lần nhấn quá ngắn (dưới 1 giây), không làm gì
+    if (!formConfig || isToggling || timeSinceLastToggle < 1000) {
+      console.log('Bỏ qua yêu cầu toggle do quá nhanh hoặc đang xử lý');
+      return;
+    }
+    
+    // Cập nhật thời gian cuối cùng toggle
+    lastToggleTimeRef.current = now;
+    
+    // Đánh dấu đang trong quá trình toggle để tránh nhấn nhiều lần
+    setIsToggling(true);
+    
+    // Tạo trạng thái mới ngược lại với trạng thái hiện tại
+    const newIsFormClosed = !formConfig.isFormClosed;
+    console.log(`Đang chuyển trạng thái form sang: ${newIsFormClosed ? 'Đóng' : 'Mở'}`);
+    
+    // Cập nhật trạng thái UI ngay lập tức để người dùng thấy sự thay đổi
     setFormConfig({
       ...formConfig,
       isFormClosed: newIsFormClosed
     });
+    
+    // Hủy bỏ timeout trước đó nếu có
+    if (toggleTimeoutRef.current) {
+      clearTimeout(toggleTimeoutRef.current);
+    }
+    
+    // Gửi thông báo thay đổi trạng thái form qua API form-status/notify với debounce
+    // KHÔNG gửi cấu hình form để đảm bảo tách biệt hoàn toàn với nút "Lưu cấu hình"
+    toggleTimeoutRef.current = setTimeout(async () => {
+      try {
+        console.log('Bắt đầu gửi thông báo thay đổi trạng thái form...');
+        
+        // Lấy thông báo khi đóng form từ cấu hình hoặc dùng thông báo mặc định
+        const message = newIsFormClosed ? 
+          (formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.') : 
+          '';
+        
+        // Thêm timeout để tránh chờ vô hạn nếu server không phản hồi
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
+        
+        // Gửi thông báo thay đổi trạng thái form
+        const response = await fetch('/api/form-status/notify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            isOpen: !newIsFormClosed,
+            message: message
+          }),
+          signal: controller.signal
+        });
+        
+        // Xóa timeout vì đã nhận được phản hồi
+        clearTimeout(timeoutId);
 
-    // Hiển thị thông báo
-    showModal(
-      newIsFormClosed ? 'Đóng form' : 'Mở form', 
-      newIsFormClosed ? 'Form đã được đóng. Người dùng sẽ không thể gửi đăng ký mới.' : 'Form đã được mở. Người dùng có thể gửi đăng ký mới.', 
-      'info'
-    );
+        if (response.ok) {
+          console.log(`Đã cập nhật trạng thái form thành công: ${newIsFormClosed ? 'Đóng' : 'Mở'}`);
+        } else {
+          console.error('Lỗi khi cập nhật trạng thái form:', await response.text());
+          // Nếu có lỗi, hoàn tác trạng thái UI về trạng thái ban đầu
+          setFormConfig({
+            ...formConfig,
+            isFormClosed: !newIsFormClosed
+          });
+        }
+      } catch (error: any) {
+        // Kiểm tra nếu là lỗi timeout hoặc kết nối bị từ chối
+        if (error.name === 'AbortError') {
+          console.error('Yêu cầu thay đổi trạng thái form đã hết thời gian chờ');
+        } else if (error.message && error.message.includes('Failed to fetch')) {
+          console.error('Không thể kết nối đến server. Hãy kiểm tra xem server đã khởi động chưa.');
+        } else {
+          console.error('Lỗi khi gửi thông báo thay đổi trạng thái form:', error);
+        }
+        
+        // Nếu có lỗi, hoàn tác trạng thái UI về trạng thái ban đầu
+        setFormConfig({
+          ...formConfig,
+          isFormClosed: !newIsFormClosed
+        });
+      } finally {
+        // Kết thúc quá trình toggle
+        setIsToggling(false);
+      }
+    }, 300); // Debounce 300ms để tránh gọi API liên tục khi nhấn nhiều lần
   };
-
   // Xử lý thay đổi cấu hình giới hạn đăng ký
   const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!formConfig || !formConfig.registrationLimit) return;
@@ -997,40 +1132,23 @@ export default function FormConfigPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1>Cấu hình form đăng ký</h1>
           {formConfig && (
-            <button 
-              onClick={handleToggleFormClosed}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: formConfig.isFormClosed ? '#4CAF50' : '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              {formConfig.isFormClosed ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
-                  Mở form
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                  </svg>
-                  Đóng form
-                </>
-              )}
-            </button>
+            <div className="switch-container">
+              <div className="switch-label">Trạng thái form:</div>
+              <label className="switch">
+                <input 
+                  type="checkbox" 
+                  checked={!formConfig.isFormClosed}
+                  onChange={handleToggleFormClosed}
+                />
+                <span className="slider">
+                  <span className="slider-text text-on">MỞ</span>
+                  <span className="slider-text text-off">ĐÓNG</span>
+                </span>
+              </label>
+              <span className={`status-text ${formConfig.isFormClosed ? 'status-closed' : 'status-open'}`}>
+                {formConfig.isFormClosed ? 'Đóng' : 'Mở'}
+              </span>
+            </div>
           )}
         </div>
         

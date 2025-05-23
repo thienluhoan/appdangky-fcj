@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
 import ExportDialog from '../components/ExportDialog';
 import * as XLSX from 'xlsx';
+import { toast } from 'react-toastify';
 
 interface Visit {
   id: string;
@@ -228,11 +229,14 @@ export default function ListPage(): React.ReactElement {
           setLoading(true);
           
           // Gọi API batch để duyệt tất cả các đăng ký cùng lúc
+          // Sử dụng cookie tự động thay vì lấy token từ localStorage
           const response = await fetch('http://localhost:3000/api/visits/batch-update', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'application/json'
             },
+            // Thêm credentials: 'include' để gửi cookie tự động
+            credentials: 'include',
             body: JSON.stringify({
               ids: itemsToApprove,
               status: 'approved'
@@ -311,11 +315,14 @@ export default function ListPage(): React.ReactElement {
           setLoading(true);
           
           // Gọi API batch để từ chối tất cả các đăng ký cùng lúc
+          // Sử dụng cookie tự động thay vì lấy token từ localStorage
           const response = await fetch('http://localhost:3000/api/visits/batch-update', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'application/json'
             },
+            // Thêm credentials: 'include' để gửi cookie tự động
+            credentials: 'include',
             body: JSON.stringify({
               ids: itemsToReject,
               status: 'rejected'
@@ -747,12 +754,16 @@ Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}
           if (response.ok) {
             // Cập nhật state để xóa đăng ký khỏi UI
             setVisits(prev => prev.filter(visit => visit.id !== id));
-            // Hiển thị thông báo thành công bằng modal
-            showModal(
-              'Thành công',
-              'Đã xóa đăng ký thành công!',
-              'success'
-            );
+            
+            // Sử dụng toast thay vì modal để hiển thị thông báo thành công
+            toast.success('Đã xóa đăng ký thành công!', {
+              position: "top-right",
+              autoClose: 3000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+            });
           } else {
             const errorText = await response.text();
             throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
@@ -760,12 +771,16 @@ Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}
         } catch (error) {
           console.error('Error deleting visit:', error);
           setError('Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'));
-          // Hiển thị thông báo lỗi bằng modal
-          showModal(
-            'Lỗi',
-            'Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'),
-            'error'
-          );
+          
+          // Sử dụng toast.error thay vì modal để hiển thị thông báo lỗi
+          toast.error('Lỗi khi xóa đăng ký: ' + (error instanceof Error ? error.message : 'Không xác định'), {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
         } finally {
           setLoading(false);
         }

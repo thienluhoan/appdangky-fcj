@@ -2,6 +2,14 @@
   !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./src/app/form/styles.css ***!
   \*********************************************************************************************************************************************************************************************************************************************************************/
 /* Styles cho trang cấu hình form */
+html {
+  overflow-y: scroll; /* Luôn hiển thị thanh cuộn dọc */
+}
+
+body {
+  padding-right: 0 !important; /* Ngăn không cho body bị thêm padding khi có thanh cuộn */
+}
+
 .container {
   max-width: 1000px;
   margin: 0 auto;
@@ -664,6 +672,33 @@ input:checked + .slider:before {
   background-color: #FF9900 !important;
 }
 
+/* Ngăn chặn việc bôi đen các phần tử có biểu tượng pointer */
+[role="button"],
+button,
+.btn,
+.btn-primary,
+.btn-save,
+.btn-back,
+.btn-add-option,
+.btn-icon,
+.switch,
+.slider,
+.tab,
+input[type="checkbox"] + label,
+input[type="radio"] + label,
+.switch-container label,
+.floor-limit-header,
+*[onclick],
+*[class*="btn"],
+*[class*="button"],
+*[style*="cursor: pointer"],
+*:hover[style*="cursor: pointer"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
 /*!****************************************************************************************************************************************************************************************************************************************************************************!*\
   !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./src/app/form/form-schedule.css ***!
   \****************************************************************************************************************************************************************************************************************************************************************************/
@@ -883,6 +918,236 @@ textarea[name="closedMessage"]:focus {
      -moz-user-select: none;
           user-select: none;
   transition: none;
+}
+
+/*!**************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./src/app/form/time-picker.css ***!
+  \**************************************************************************************************************************************************************************************************************************************************************************/
+/* CSS tùy chỉnh cho TimePicker */
+.react-time-picker {
+  display: inline-flex;
+  position: relative;
+  width: 100%;
+  max-width: 180px;
+}
+
+.react-time-picker__wrapper {
+  display: flex;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px 12px;
+  background-color: #fff;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.react-time-picker__wrapper:hover {
+  border-color: #1e2e3e;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.react-time-picker__wrapper:focus-within {
+  border-color: #1e2e3e;
+  box-shadow: 0 0 0 2px rgba(30, 46, 62, 0.2), 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.react-time-picker__inputGroup {
+  min-width: 80px;
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-time-picker__inputGroup__input {
+  min-width: 16px;
+  height: 100%;
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: center;
+  color: #1e2e3e;
+}
+
+.react-time-picker__inputGroup__input:focus {
+  outline: none;
+}
+
+.react-time-picker__inputGroup__divider {
+  padding: 0 4px;
+  color: #1e2e3e;
+  font-weight: bold;
+}
+
+.react-time-picker__inputGroup__hour,
+.react-time-picker__inputGroup__minute {
+  font-weight: 600;
+}
+
+/* Định dạng cho nút mũi tên tăng/giảm */
+.react-time-picker__button {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.react-time-picker__button:hover {
+  background-color: rgba(30, 46, 62, 0.1);
+}
+
+.react-time-picker__button:active {
+  background-color: rgba(30, 46, 62, 0.2);
+}
+
+.react-time-picker__button svg {
+  stroke: #1e2e3e;
+  stroke-width: 2px;
+  transition: all 0.2s ease;
+}
+
+.react-time-picker__button:hover svg {
+  stroke: #0a1624;
+}
+
+/* Đảm bảo độ rộng phù hợp với layout */
+.time-group .react-time-picker {
+  width: 100%;
+}
+
+/* Tùy chỉnh màu sắc cho phần chọn giờ */
+.react-time-picker__inputGroup__leadingZero {
+  color: #666;
+}
+
+/* Tùy chỉnh khoảng cách giữa các phần tử trong time group */
+.time-group {
+  gap: 40px;
+}
+
+.time-group > div {
+  flex: 1;
+}
+
+.time-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+/*!****************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./src/app/form/switch-toggle.css ***!
+  \****************************************************************************************************************************************************************************************************************************************************************************/
+.switch-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.switch-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 30px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #f44336;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(30px);
+}
+
+.slider-text {
+  position: absolute;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  transition: .4s;
+  display: none;
+}
+
+.text-on {
+  right: 8px;
+  opacity: 0;
+}
+
+.text-off {
+  left: 8px;
+}
+
+input:checked + .slider .text-on {
+  opacity: 1;
+}
+
+input:checked + .slider .text-off {
+  opacity: 0;
+}
+
+.status-text {
+  font-weight: 500;
+  margin-left: 10px;
+  min-width: 40px; /* Cố định độ rộng tối thiểu */
+  display: inline-block; /* Đảm bảo min-width có tác dụng */
+  text-align: left; /* Căn chỉnh văn bản */
+}
+
+.status-open {
+  color: #4CAF50;
+}
+
+.status-closed {
+  color: #f44336;
 }
 
 /*!***************************************************************************************************************************************************************************************************************************************************************************************!*\

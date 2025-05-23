@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -5,10 +6,8 @@ const fs = require('fs');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 
-// Import routes và models
+// Import routes
 const apiRoutes = require('./routes/index');
-const { migrateDataFromJsonToPrisma } = require('./models/visitModel');
-const { migrateConfigFromJsonToPrisma } = require('./models/formConfigModel');
 
 const prisma = new PrismaClient();
 const app = express();
@@ -88,9 +87,12 @@ io.on('connection', (socket) => {
         try {
           const { sendApprovalEmail } = require('./emailService');
           
+          // Lấy userId từ request
+          const userId = req.user?.id;
+          
           // Sử dụng dịch vụ email qua Gmail
-          console.log('Gửi email thông báo duyệt...');
-          const result = await sendApprovalEmail(updatedVisit);
+          console.log('Gửi email thông báo duyệt...', 'User ID:', userId);
+          const result = await sendApprovalEmail(updatedVisit, userId);
           
           if (result) {
             console.log('Đã gửi email thông báo duyệt đến:', updatedVisit.email);
@@ -158,9 +160,12 @@ io.on('connection', (socket) => {
         try {
           const { sendRejectionEmail } = require('./emailService');
           
+          // Lấy userId từ request
+          const userId = req.user?.id;
+          
           // Sử dụng dịch vụ email qua Gmail
-          console.log('Gửi email thông báo từ chối...');
-          const result = await sendRejectionEmail(updatedVisit);
+          console.log('Gửi email thông báo từ chối...', 'User ID:', userId);
+          const result = await sendRejectionEmail(updatedVisit, userId);
           
           if (result) {
             console.log('Đã gửi email thông báo từ chối đến:', updatedVisit.email);
@@ -194,10 +199,6 @@ io.on('connection', (socket) => {
 // Hàm khởi động server
 async function startServer() {
   try {
-    // Chạy migration từ JSON sang Prisma nếu cần
-    await migrateDataFromJsonToPrisma();
-    await migrateConfigFromJsonToPrisma();
-    
     // Khởi động server
     server.listen(PORT, () => {
       console.log(`Server đang chạy tại http://localhost:${PORT}`);

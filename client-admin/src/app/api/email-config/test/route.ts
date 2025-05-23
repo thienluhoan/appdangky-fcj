@@ -16,11 +16,19 @@ export async function POST(request: NextRequest) {
     // }
 
     // Lấy dữ liệu từ request
-    const { email, password } = await request.json();
+    const { host, port, secure, email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: 'Email và mật khẩu là bắt buộc' },
+        { status: 400 }
+      );
+    }
+    
+    // Kiểm tra các trường khác
+    if (!host || !port) {
+      return NextResponse.json(
+        { success: false, message: 'SMTP Host và Port là bắt buộc' },
         { status: 400 }
       );
     }
@@ -37,6 +45,9 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${token || ''}`,
       },
       body: JSON.stringify({
+        host,
+        port,
+        secure,
         email,
         password
       }),

@@ -31,7 +31,7 @@ const ClosedFormPage: React.FC<ClosedFormPageProps> = ({ message }) => {
           </svg>
         </div>
         
-        <h1 className="closed-form-title">Form Đăng Ký Đã Đóng</h1>
+        <h1 className="closed-form-title">Form đăng ký đã đóng</h1>
         
         <div className="closed-form-message">
           {message || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'}

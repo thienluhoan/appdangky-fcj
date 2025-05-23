@@ -151,14 +151,18 @@ router.post('/test', async (req, res) => {
     const { host, port, secure, email, password } = req.body;
     
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email và mật khẩu không được để trống' });
+      return res.status(400).json({ success: false, error: 'Email và mật khẩu không được để trống' });
+    }
+    
+    if (!host || !port) {
+      return res.status(400).json({ success: false, error: 'SMTP Host và Port là bắt buộc' });
     }
     
     // Tạo transporter để kiểm tra kết nối
     const transporter = nodemailer.createTransport({
-      host: host || 'smtp.gmail.com',
-      port: parseInt(port) || 587,
-      secure: secure || false,
+      host: host,
+      port: parseInt(port),
+      secure: secure,
       auth: {
         user: email,
         pass: password

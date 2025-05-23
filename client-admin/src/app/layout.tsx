@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Metadata được chuyển vào file metadata.ts riêng biệt
 
@@ -21,6 +23,28 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
   // Thông tin người dùng
   const [userData, setUserData] = useState({ username: 'Admin', email: '' });
   
+  // Tạo ref cho dropdown menu
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Xử lý click outside cho dropdown menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+
+    // Thêm event listener khi dropdown hiển thị
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
   useEffect(() => {
     // Kiểm tra cookie trong useEffect để tránh lỗi hydration
     const checkLoginStatus = () => {
@@ -46,6 +70,17 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
           // Thêm cache: 'no-store' để đảm bảo luôn lấy dữ liệu mới nhất
           cache: 'no-store'
         });
+        
+        // Nếu gặp lỗi 401 (Unauthorized), xóa cookie và chuyển hướng về trang đăng nhập
+        if (response.status === 401) {
+          console.log('Phiên đăng nhập hết hạn hoặc không hợp lệ. Đang chuyển hướng về trang đăng nhập...');
+          document.cookie = 'isLoggedIn=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          localStorage.removeItem('adminLoggedIn');
+          localStorage.removeItem('userData');
+          window.location.href = '/login';
+          return;
+        }
 
         if (response.ok) {
           const data = await response.json();
@@ -143,6 +178,18 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
         `}</style>
       </head>
       <body suppressHydrationWarning style={{ margin: 0, padding: 0, overflow: 'auto' }}>
+        {/* Thêm ToastContainer để hiển thị thông báo toast */}
+        <ToastContainer 
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
         {/* Chỉ hiển thị header khi không phải trang login */}
         {!isLoginPage && (
           <header style={{ 
@@ -299,16 +346,18 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
                   </div>
                   
                   {showDropdown && (
-                    <div style={{ 
-                      position: 'absolute', 
-                      top: '50px', 
-                      right: '0', 
-                      backgroundColor: 'white', 
-                      borderRadius: '4px', 
-                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)', 
-                      width: '200px',
-                      zIndex: 10
-                    }}>
+                    <div 
+                      ref={dropdownRef}
+                      style={{ 
+                        position: 'absolute', 
+                        top: '50px', 
+                        right: '0', 
+                        backgroundColor: 'white', 
+                        borderRadius: '4px', 
+                        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)', 
+                        width: '200px',
+                        zIndex: 10
+                      }}>
                       <div style={{ padding: '15px', borderBottom: '1px solid #eee' }}>
                         <div style={{ fontWeight: '600', color: '#333' }}>{userData.username}</div>
                         <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>{userData.email}</div>

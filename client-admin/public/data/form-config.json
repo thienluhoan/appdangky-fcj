@@ -15,6 +15,11 @@
         "floorName": "Tầng 46",
         "maxRegistrations": 1,
         "enabled": true
+      },
+      {
+        "floorName": "Tầng 36",
+        "maxRegistrations": 3,
+        "enabled": false
       }
     ]
   },
@@ -61,7 +66,8 @@
       "enabled": true,
       "options": [
         "Tầng 26",
-        "Tầng 46"
+        "Tầng 46",
+        "Tầng 36"
       ]
     },
     "contact": {
@@ -86,16 +92,17 @@
   },
   "formSchedule": {
     "enabled": false,
-    "openTime": "21:20",
-    "closeTime": "22:00",
+    "openTime": "22:43",
+    "closeTime": "22:44",
     "openDays": [
       0,
       1,
       2,
       3,
-      4
+      4,
+      5
     ],
     "closedMessage": "Form đăng ký hiện đã đóng. Vui lòng quay lại sau."
   },
-  "isFormClosed": false
+  "isFormClosed": true
 }

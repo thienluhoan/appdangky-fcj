@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const visitController = require('../controllers/visitController');
+const { isAuthenticated } = require('../middleware/auth');
 
 // API endpoints
 router.get('/', visitController.getVisits);
@@ -18,7 +19,7 @@ router.get('/count-floor', visitController.countFloorVisits);
 router.post('/batch-delete', visitController.batchDeleteVisits);
 
 // API endpoint để cập nhật hàng loạt đăng ký
-router.post('/batch-update', visitController.batchUpdateVisits);
+router.post('/batch-update', isAuthenticated, visitController.batchUpdateVisits);
 
 // Giữ lại API cũ để tương thích ngược
 router.put('/:id', visitController.updateVisitStatus);

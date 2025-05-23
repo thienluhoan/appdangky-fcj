@@ -1,0 +1,10 @@
+1. Tạo người dùng và database PostgreSQL:
+sudo -u postgres psql -c "CREATE USER dangkifcj WITH PASSWORD 'dangkifcj';"
+2. Tạo database cho người dùng vừa tạo:
+sudo -u postgres psql -c "CREATE DATABASE dangkifcj OWNER dangkifcj;"
+3. Cấp quyền cho người dùng trên database:
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE dangkifcj TO dangkifcj;"
+4. Chạy migration để tạo các bảng trong database:
+npm run migrate
+5. Khởi động server
+npm run start-with-migrate

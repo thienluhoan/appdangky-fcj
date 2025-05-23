@@ -1,0 +1,104 @@
+.switch-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.switch-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 30px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #f44336;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(30px);
+}
+
+.slider-text {
+  position: absolute;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  transition: .4s;
+  display: none;
+}
+
+.text-on {
+  right: 8px;
+  opacity: 0;
+}
+
+.text-off {
+  left: 8px;
+}
+
+input:checked + .slider .text-on {
+  opacity: 1;
+}
+
+input:checked + .slider .text-off {
+  opacity: 0;
+}
+
+.status-text {
+  font-weight: 500;
+  margin-left: 10px;
+  min-width: 40px; /* Cố định độ rộng tối thiểu */
+  display: inline-block; /* Đảm bảo min-width có tác dụng */
+  text-align: left; /* Căn chỉnh văn bản */
+}
+
+.status-open {
+  color: #4CAF50;
+}
+
+.status-closed {
+  color: #f44336;
+}

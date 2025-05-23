@@ -1,4 +1,12 @@
 /* Styles cho trang cấu hình form */
+html {
+  overflow-y: scroll; /* Luôn hiển thị thanh cuộn dọc */
+}
+
+body {
+  padding-right: 0 !important; /* Ngăn không cho body bị thêm padding khi có thanh cuộn */
+}
+
 .container {
   max-width: 1000px;
   margin: 0 auto;
@@ -657,4 +665,31 @@ input:checked + .slider:before {
 
 .btn-primary.save-button:active {
   background-color: #FF9900 !important;
+}
+
+/* Ngăn chặn việc bôi đen các phần tử có biểu tượng pointer */
+[role="button"],
+button,
+.btn,
+.btn-primary,
+.btn-save,
+.btn-back,
+.btn-add-option,
+.btn-icon,
+.switch,
+.slider,
+.tab,
+input[type="checkbox"] + label,
+input[type="radio"] + label,
+.switch-container label,
+.floor-limit-header,
+*[onclick],
+*[class*="btn"],
+*[class*="button"],
+*[style*="cursor: pointer"],
+*:hover[style*="cursor: pointer"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }

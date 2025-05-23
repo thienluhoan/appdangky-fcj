@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 
 // Định nghĩa interface cho đối tượng User
 interface User {
@@ -60,6 +61,35 @@ export default function AccountPage(): React.ReactElement {
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
+  // Lấy cấu hình email
+  const fetchEmailConfig = async () => {
+    try {
+      const res = await fetch('/api/email-config', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+
+      // API trả về dữ liệu trực tiếp, không có trường success hay config
+      if (data) {
+        console.log('Nhận được cấu hình email:', data);
+        setEmailConfig({
+          host: data.host || '',
+          port: data.port || '',
+          secure: data.secure || false,
+          email: data.email || '',
+          password: data.password || ''
+        });
+      }
+    } catch (err) {
+      console.error('Lỗi khi lấy cấu hình email:', err);
+    }
+  };
+
   useEffect(() => {
     // Kiểm tra xem người dùng đã đăng nhập chưa
     const isLoggedIn = localStorage.getItem('adminLoggedIn') === 'true';
@@ -102,33 +132,6 @@ export default function AccountPage(): React.ReactElement {
         setError('Lỗi kết nối server');
       } finally {
         setLoading(false);
-      }
-    };
-
-    // Lấy cấu hình email
-    const fetchEmailConfig = async () => {
-      try {
-        const res = await fetch('/api/email-config', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          setEmailConfig({
-            host: data.config.host || '',
-            port: data.config.port || '',
-            secure: data.config.secure || false,
-            email: data.config.email || '',
-            password: data.config.password ? '********' : ''
-          });
-        }
-      } catch (err) {
-        console.error('Lỗi khi lấy cấu hình email:', err);
       }
     };
 
@@ -375,6 +378,8 @@ export default function AccountPage(): React.ReactElement {
         password: emailConfig.password === '********' ? undefined : emailConfig.password
       };
 
+      console.log('Đang gửi cấu hình email:', configToSend);
+
       const res = await fetch('/api/email-config', {
         method: 'POST',
         headers: {
@@ -387,13 +392,43 @@ export default function AccountPage(): React.ReactElement {
       const data = await res.json();
 
       if (data.success) {
-        setSuccess('Cập nhật cấu hình email thành công');
+        // Sử dụng toast thay vì dialog
+        toast.success('Cập nhật cấu hình email thành công', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        
+        // Tải lại cấu hình email từ server sau khi lưu thành công
+        // Đợi 500ms để đảm bảo server đã lưu xong dữ liệu
+        setTimeout(() => {
+          fetchEmailConfig();
+        }, 500);
       } else {
-        setError(data.message || 'Cập nhật cấu hình email thất bại');
+        // Sử dụng toast.error thay vì setError
+        toast.error(data.message || 'Cập nhật cấu hình email thất bại', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
       }
     } catch (err) {
       console.error('Lỗi khi cập nhật cấu hình email:', err);
-      setError('Lỗi kết nối server');
+      // Sử dụng toast.error thay vì setError
+      toast.error('Lỗi kết nối server', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setUpdateLoading(false);
     }
