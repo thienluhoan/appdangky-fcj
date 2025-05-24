@@ -15,7 +15,7 @@ async function getVisits(req, res) {
 // POST /api/visits
 async function createVisit(req, res) {
   try {
-    const { name, email, phone, date, purpose, school, floor, time, contact, purposeDetail, studentId } = req.body;
+    const { name, email, phone, studentId, school, floor, date, time, timeOfDay, purpose, purposeDetail, contact } = req.body;
     if (!name || !email || !phone || !date || !purpose) {
       return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin' });
     }
@@ -24,107 +24,8 @@ async function createVisit(req, res) {
     console.log('Registration data received:', req.body);
     console.log('Student ID received:', studentId);
     
-    // Kiểm tra trạng thái form trước khi cho phép đăng ký
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      
-      // Đường dẫn đến file cấu hình form
-      const formConfigPath = path.join(__dirname, '../../data/form-config.json');
-      
-      // Đọc cấu hình form từ file
-      const formConfig = JSON.parse(fs.readFileSync(formConfigPath, 'utf8'));
-      
-      // Kiểm tra trạng thái đóng form thủ công
-      if (formConfig.isFormClosed) {
-        console.log('Form đã bị đóng thủ công, từ chối đăng ký');
-        
-        // Gửi thông báo đến tất cả các client đang kết nối
-        try {
-          const io = req.app.get('io');
-          if (io) {
-            io.emit('form-status-changed', { 
-              isOpen: false, 
-              message: formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.'
-            });
-            console.log('Gửi thông báo đóng form đến tất cả các client');
-          }
-        } catch (socketError) {
-          console.error('Lỗi khi gửi thông báo Socket.IO:', socketError);
-        }
-        
-        return res.status(403).json({
-          error: formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.'
-        });
-      }
-      
-      // Kiểm tra lịch trình đóng/mở form nếu có
-      if (formConfig.formSchedule && formConfig.formSchedule.enabled) {
-        // Kiểm tra ngày trong tuần
-        const now = new Date();
-        const currentDay = now.getDay(); // 0 = Chủ nhật, 1 = Thứ 2, ...
-        
-        // Kiểm tra xem ngày hiện tại có trong danh sách ngày mở cửa không
-        if (!formConfig.formSchedule.openDays.includes(currentDay)) {
-          console.log('Ngày hiện tại không nằm trong ngày mở cửa, từ chối đăng ký');
-          
-          // Gửi thông báo đến tất cả các client đang kết nối
-          try {
-            const io = req.app.get('io');
-            if (io) {
-              io.emit('form-status-changed', { 
-                isOpen: false, 
-                message: formConfig.formSchedule.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-              });
-              console.log('Gửi thông báo đóng form đến tất cả các client');
-            }
-          } catch (socketError) {
-            console.error('Lỗi khi gửi thông báo Socket.IO:', socketError);
-          }
-          
-          return res.status(403).json({
-            error: formConfig.formSchedule.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-          });
-        }
-        
-        // Kiểm tra giờ mở cửa và đóng cửa
-        const [openHour, openMinute] = formConfig.formSchedule.openTime.split(':').map(Number);
-        const [closeHour, closeMinute] = formConfig.formSchedule.closeTime.split(':').map(Number);
-        
-        // Tạo đối tượng Date cho thời gian mở cửa và đóng cửa trong ngày hiện tại
-        const openTimeToday = new Date(now);
-        openTimeToday.setHours(openHour, openMinute, 0, 0);
-        
-        const closeTimeToday = new Date(now);
-        closeTimeToday.setHours(closeHour, closeMinute, 0, 0);
-        
-        // Kiểm tra xem thời gian hiện tại có nằm trong khoảng thời gian mở cửa không
-        if (!(now >= openTimeToday && now <= closeTimeToday)) {
-          console.log('Thời gian hiện tại không nằm trong khoảng thời gian mở cửa, từ chối đăng ký');
-          
-          // Gửi thông báo đến tất cả các client đang kết nối
-          try {
-            const io = req.app.get('io');
-            if (io) {
-              io.emit('form-status-changed', { 
-                isOpen: false, 
-                message: formConfig.formSchedule.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-              });
-              console.log('Gửi thông báo đóng form đến tất cả các client');
-            }
-          } catch (socketError) {
-            console.error('Lỗi khi gửi thông báo Socket.IO:', socketError);
-          }
-          
-          return res.status(403).json({
-            error: formConfig.formSchedule.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-          });
-        }
-      }
-    } catch (formCheckError) {
-      console.error('Lỗi khi kiểm tra trạng thái form:', formCheckError);
-      // Tiếp tục xử lý đăng ký nếu có lỗi khi kiểm tra trạng thái form
-    }
+    // Form luôn mở vì đã xóa chức năng đặt lịch
+    console.log('Form luôn mở, tiếp tục xử lý đăng ký');
     
     // Check for total daily capacity limit (55 registrations per day)
     const todayRegistrations = await prisma.visit.count({

@@ -22,6 +22,30 @@
   background-color: white;
 }
 
+/* Styles cho DatePicker */
+.datepicker-container {
+  width: 100%;
+}
+
+.datepicker-container .react-datepicker-wrapper {
+  width: 100%;
+  display: block;
+}
+
+.datepicker-container .react-datepicker__input-container {
+  width: 100%;
+  display: block;
+}
+
+.datepicker-container input {
+  width: 100%;
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background-color: white;
+}
+
 .form-input:focus {
   border-color: #1e2e3e;
   border-width: 1px;
@@ -79,6 +103,19 @@
   transition: all 0.2s ease;
 }
 
+/* Style cho trường ngày bị vô hiệu hóa */
+.disabled-date {
+  background-color: #f5f5f5;
+  color: #666;
+  cursor: not-allowed;
+  border-color: #ddd;
+}
+
+.disabled-date:hover, .disabled-date:focus {
+  border-color: #ddd;
+  box-shadow: none;
+}
+
 .select-input {
   width: 100%;
   padding: 10px 15px;
@@ -99,6 +136,79 @@
 .required {
   color: #e53e3e;
   margin-left: 2px;
+}
+
+/*!*********************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./src/app/mui-pickers.css ***!
+  \*********************************************************************************************************************************************************************************************************************************************************************/
+/* MUI DatePicker, TimePicker và TextField styles */
+.datepicker-container, .form-group {
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+/* Tùy chỉnh DatePicker, TimePicker và TextField */
+.mui-datepicker, .mui-timepicker, .mui-textfield {
+  width: 100%;
+  font-family: inherit;
+}
+
+/* Tùy chỉnh input */
+.MuiOutlinedInput-root {
+  border-radius: 6px;
+  background-color: #fff;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Tùy chỉnh label */
+.MuiInputLabel-root {
+  font-family: inherit;
+  font-size: 14px;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Tùy chỉnh màu sắc khi focus */
+.MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: #3b82f6;
+  border-width: 2px;
+}
+
+.MuiInputLabel-root.Mui-focused {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+/* Tùy chỉnh icon trong input */
+.input-icon {
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+/* Tùy chỉnh popup calendar */
+.MuiPaper-root {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Tùy chỉnh ngày được chọn */
+.MuiPickersDay-root.Mui-selected {
+  background-color: #3b82f6;
+}
+
+/* Tùy chỉnh nút trong popup */
+.MuiButton-root {
+  text-transform: none;
+  font-family: inherit;
+}
+
+/* Tùy chỉnh kích thước cho mobile */
+@media (max-width: 600px) {
+  .MuiDialog-paper {
+    margin: 10px;
+    max-width: calc(100% - 20px);
+  }
 }
 
 /*!***********************************************************************************************************************************************************************************************************************************************************************************!*\

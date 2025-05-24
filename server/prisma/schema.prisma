@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,54 +8,123 @@ datasource db {
 }
 
 model Visit {
-  id          String   @id @default(cuid())
-  name        String
-  email       String
-  phone       String
-  school      String
-  studentId   String?
-  date        String
-  purpose     String
-  department  String?
-  time        String?
-  contact     String?
-  note        String?
-  floor       String?
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  timestamp   String?
+  id         String   @id @default(cuid())
+  name       String
+  email      String
+  phone      String
+  school     String
+  studentId  String?
+  date       String
+  purpose    String
+  time       String?
+  contact    String?
+  note       String?
+  floor      String?
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  timestamp  String?
 
   @@map("visits")
 }
 
 model FormConfig {
-  id                String   @id @default("default")
-  title             String   @default("Đăng ký lên văn phòng")
-  isFormClosed      Boolean  @default(false)
-  registrationLimit Json?
-  fields            Json
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                String             @id @default("default")
+  title             String             @default("Đăng ký lên văn phòng")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  isFormClosed      Boolean            @default(false)
+  formFields        FormField[]        @relation("FormFields")
+  registrationLimit RegistrationLimit? @relation("FormRegistrationLimit")
 
   @@map("form_config")
 }
 
-enum UserRole {
-  ADMIN
-  SUPER_ADMIN
+// Model này sẽ bị xóa sau khi migration
+model FormOption {
+  id                  String      @id @default(cuid())
+  value               String
+  displayOrder        Int
+  optionType          String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@map("form_options")
+}
+
+model FormField {
+  id             String     @id @default(cuid())
+  fieldName      String
+  label          String
+  required       Boolean    @default(false)
+  enabled        Boolean    @default(true)
+  defaultValue   String?    
+  fieldType      String     @default("text") // Loại trường: text, textarea, dropdown, date, time, etc.
+  placeholder    String?    // Placeholder cho trường
+  isCustom       Boolean    @default(false) // Đánh dấu trường tùy chỉnh
+  allowDateChange Boolean?   // Cho phép thay đổi ngày (chỉ dùng cho trường date)
+  dateFormat     String?    // Định dạng hiển thị ngày (chỉ dùng cho trường date)
+  allowTimeChange Boolean?   // Cho phép thay đổi thời gian (chỉ dùng cho trường time)
+  timeFormat     String?    // Định dạng hiển thị thời gian: 24h hoặc 12h (chỉ dùng cho trường time)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  formConfig     FormConfig @relation("FormFields", fields: [formConfigId], references: [id])
+  formConfigId   String
+  options        FieldOption[] @relation("FieldOptions")
+
+  @@map("form_fields")
+}
+
+model FieldOption {
+  id           String     @id @default(cuid())
+  value        String     // Giá trị của tùy chọn
+  label        String     // Nhãn hiển thị của tùy chọn
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  formField    FormField  @relation("FieldOptions", fields: [formFieldId], references: [id], onDelete: Cascade)
+  formFieldId  String
+
+  @@map("field_options")
+}
+
+model RegistrationLimit {
+  id                    String            @id @default(cuid())
+  enabled               Boolean           @default(false)
+  maxRegistrationsPerDay Int              @default(10)
+  message               String            @default("Đã đạt giới hạn đăng ký cho ngày hôm nay. Vui lòng thử lại vào ngày mai.")
+  byFloor               Boolean           @default(false)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  formConfig            FormConfig        @relation("FormRegistrationLimit", fields: [formConfigId], references: [id])
+  formConfigId          String            @unique
+  floorLimits           FloorLimit[]      @relation("FloorLimits")
+
+  @@map("registration_limits")
+}
+
+model FloorLimit {
+  id                   String            @id @default(cuid())
+  floorName            String
+  maxRegistrations     Int               @default(3)
+  enabled              Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  registrationLimit    RegistrationLimit @relation("FloorLimits", fields: [registrationLimitId], references: [id])
+  registrationLimitId  String
+
+  @@map("floor_limits")
 }
 
 model User {
-  id                String    @id @default(cuid())
-  username          String    @unique
-  email             String    @unique
+  id                String       @id @default(cuid())
+  username          String       @unique
+  email             String       @unique
   password          String
-  role              UserRole  @default(ADMIN)
-  isVerified        Boolean   @default(false)
-  verificationToken String?   
+  role              UserRole     @default(ADMIN)
+  isVerified        Boolean      @default(false)
+  verificationToken String?
   tokenExpiry       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
   emailConfig       EmailConfig?
 
   @@map("users")
@@ -73,8 +139,13 @@ model EmailConfig {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_configs")
+}
+
+enum UserRole {
+  ADMIN
+  SUPER_ADMIN
 }

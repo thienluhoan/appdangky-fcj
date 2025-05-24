@@ -4,17 +4,38 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { io } from 'socket.io-client';
 import './styles.css';
-import DateField from './date-field';
-import TimeField from './time-field';
+import './mui-pickers.css';
 import ClosedFormPage from './components/ClosedFormPage';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { TextField } from '@mui/material';
+import { MuiCustomProvider } from './mui-custom-config';
+import dayjs from 'dayjs';
+import { format, parse } from 'date-fns';
 
 // Định nghĩa kiểu dữ liệu cho cấu hình form
+// Định nghĩa kiểu dữ liệu cho tùy chọn
+interface FieldOption {
+  value: string;
+  label: string;
+}
+
 interface FieldConfig {
   label: string;
   required: boolean;
   enabled: boolean;
-  options?: string[];
+  options?: string[] | FieldOption[];
   defaultValue?: string;
+  fieldType?: string;
+  placeholder?: string;
+  isCustom?: boolean;
+  allowDateChange?: boolean; // Thêm thuộc tính cho phép thay đổi ngày
+  dateFormat?: string; // Định dạng hiển thị ngày (dd/mm/yyyy, mm/dd/yyyy, yyyy-mm-dd)
+  allowTimeChange?: boolean; // Thêm thuộc tính cho phép thay đổi thời gian
+  order?: number; // Thứ tự hiển thị của trường
+  timeFormat?: string; // Định dạng hiển thị thời gian (24h hoặc 12h)
 }
 
 interface FloorLimit {
@@ -33,15 +54,7 @@ interface RegistrationLimitConfig {
 
 interface FormConfig {
   title: string;
-  isFormClosed?: boolean; // Thêm trường mới để kiểm tra trạng thái đóng/mở form
   registrationLimit?: RegistrationLimitConfig;
-  formSchedule?: {
-    enabled: boolean;
-    openTime: string;
-    closeTime: string;
-    openDays: number[];
-    closedMessage: string;
-  };
   fields: {
     [key: string]: FieldConfig;
   };
@@ -63,6 +76,201 @@ const styles = {
   }
 };
 
+// Hàm định dạng ngày theo cấu hình từ admin
+const formatDate = (dateStr: string, dateFormat?: string): string => {
+  if (!dateStr) return '';
+  
+  try {
+    // Mặc định là dd/mm/yyyy nếu không có cấu hình
+    const format = dateFormat || 'dd/mm/yyyy';
+    
+    // Parse ngày từ chuỗi YYYY-MM-DD (ISO format)
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) {
+      // Thử kiểm tra xem có phải định dạng dd/mm/yyyy hoặc mm/dd/yyyy không
+      const slashParts = dateStr.split('/');
+      if (slashParts.length === 3) {
+        // Đã ở định dạng dd/mm/yyyy hoặc mm/dd/yyyy, trả về nguyên
+        return dateStr;
+      }
+      return dateStr; // Trả về nguyên nếu không đúng định dạng
+    }
+    
+    const year = parts[0];
+    const month = parts[1];
+    const day = parts[2];
+    
+    // Định dạng lại theo cấu hình
+    if (format === 'dd/mm/yyyy') {
+      return `${day}/${month}/${year}`;
+    } else if (format === 'mm/dd/yyyy') {
+      return `${month}/${day}/${year}`;
+    } else if (format === 'yyyy-mm-dd') {
+      return dateStr; // Giữ nguyên định dạng ISO
+    }
+    
+    return dateStr; // Mặc định trả về nguyên nếu không khớp với các định dạng trên
+  } catch (error) {
+    console.error('Lỗi khi định dạng ngày:', error);
+    return dateStr; // Trả về nguyên nếu có lỗi
+  }
+};
+
+// Hàm định dạng thời gian theo định dạng 12h hoặc 24h
+const formatTimeValue = (timeStr: string, format?: string): string => {
+  if (!timeStr) return '';
+  try {
+    // Tách giờ và phút từ chuỗi thời gian
+    let hours = 0;
+    let minutes = 0;
+    let ampm = '';
+    
+    // Xử lý các định dạng thời gian khác nhau
+    if (timeStr.includes(':')) {
+      // Định dạng HH:MM hoặc HH:MM AM/PM
+      const parts = timeStr.split(':');
+      hours = parseInt(parts[0], 10);
+      
+      if (parts[1].includes(' ')) {
+        // Định dạng HH:MM AM/PM
+        const minuteAndPeriod = parts[1].split(' ');
+        minutes = parseInt(minuteAndPeriod[0], 10);
+        ampm = minuteAndPeriod[1];
+      } else {
+        // Định dạng HH:MM
+        minutes = parseInt(parts[1], 10);
+      }
+    } else {
+      // Nếu không có định dạng chuẩn, trả về chuỗi gốc
+      return timeStr;
+    }
+    
+    // Chuyển đổi giữa 12h và 24h nếu cần
+    if (format === '12h') {
+      // Chuyển từ 24h sang 12h
+      if (!ampm) {
+        if (hours === 0) {
+          hours = 12;
+          ampm = 'AM';
+        } else if (hours === 12) {
+          ampm = 'PM';
+        } else if (hours > 12) {
+          hours = hours - 12;
+          ampm = 'PM';
+        } else {
+          ampm = 'AM';
+        }
+      }
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${ampm}`;
+    } else {
+      // Chuyển từ 12h sang 24h hoặc giữ nguyên 24h
+      if (ampm) {
+        if (ampm.toUpperCase() === 'PM' && hours < 12) {
+          hours += 12;
+        } else if (ampm.toUpperCase() === 'AM' && hours === 12) {
+          hours = 0;
+        }
+      }
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+  } catch (error) {
+    console.error('Lỗi định dạng thời gian:', error);
+    return timeStr;
+  }
+};
+
+// Hàm chuyển đổi định dạng ngày từ cấu hình sang định dạng cho MUI DatePicker
+const getDatePickerFormat = (dateFormat?: string): string => {
+  // Mặc định là DD/MM/YYYY nếu không có cấu hình
+  const format = dateFormat || 'dd/mm/yyyy';
+  
+  // Chuyển đổi định dạng ngày sang định dạng của dayjs
+  if (format === 'dd/mm/yyyy') {
+    return 'DD/MM/YYYY';
+  } else if (format === 'mm/dd/yyyy') {
+    return 'MM/DD/YYYY';
+  } else if (format === 'yyyy-mm-dd') {
+    return 'YYYY-MM-DD';
+  }
+  
+  // Mặc định
+  return 'DD/MM/YYYY';
+};
+
+// Hàm chuyển đổi định dạng thời gian từ cấu hình sang định dạng cho MUI TimePicker
+const getTimePickerFormat = (timeFormat?: string): string => {
+  // Mặc định là HH:mm nếu không có cấu hình hoặc định dạng 24h
+  if (!timeFormat || timeFormat === '24h') {
+    return 'HH:mm';
+  } else {
+    // Định dạng 12h
+    return 'hh:mm A';
+  }
+};
+
+// Hàm chuyển đổi chuỗi ngày thành đối tượng dayjs
+const parseDateToDayjs = (dateStr: string): dayjs.Dayjs | null => {
+  if (!dateStr) return null;
+  try {
+    return dayjs(dateStr);
+  } catch (error) {
+    console.error('Lỗi khi phân tích chuỗi ngày:', error);
+    return null;
+  }
+};
+
+// Hàm chuyển đổi chuỗi thời gian thành đối tượng dayjs
+const parseTimeToDayjs = (timeStr: string): dayjs.Dayjs | null => {
+  if (!timeStr) return null;
+  try {
+    // Tạo đối tượng dayjs với ngày hiện tại và thời gian từ chuỗi
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    
+    if (isNaN(hours) || isNaN(minutes)) {
+      return null;
+    }
+    
+    return dayjs().hour(hours).minute(minutes).second(0).millisecond(0);
+  } catch (error) {
+    console.error('Lỗi khi phân tích chuỗi thời gian:', error);
+    return null;
+  }
+};
+
+// Hàm để giữ lại tương thích với code cũ
+const parseDate = (dateStr: string, dateFormat: string): Date | null => {
+  if (!dateStr) return null;
+  try {
+    return parse(dateStr, dateFormat, new Date());
+  } catch (error) {
+    console.error('Lỗi khi phân tích chuỗi ngày:', error);
+    return null;
+  }
+};
+
+// Hàm để giữ lại tương thích với code cũ
+const parseTimeString = (timeStr: string): Date | null => {
+  if (!timeStr) return null;
+  try {
+    const today = new Date();
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    
+    if (isNaN(hours) || isNaN(minutes)) {
+      return null;
+    }
+    
+    today.setHours(hours);
+    today.setMinutes(minutes);
+    today.setSeconds(0);
+    today.setMilliseconds(0);
+    
+    return today;
+  } catch (error) {
+    console.error('Lỗi khi phân tích chuỗi thời gian:', error);
+    return null;
+  }
+};
+
 interface FormData {
   name: string;
   email: string;
@@ -78,7 +286,17 @@ interface FormData {
   contact?: string;
 }
 
-export default function RegisterPage(): React.ReactElement {
+export default function RegisterPage() {
+  return (
+    <MuiCustomProvider>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <RegisterForm />
+      </LocalizationProvider>
+    </MuiCustomProvider>
+  );
+}
+
+function RegisterForm() {
   // Khởi tạo kết nối Socket.IO
   const socketRef = React.useRef<any>(null);
   
@@ -111,18 +329,73 @@ export default function RegisterPage(): React.ReactElement {
         // Áp dụng giá trị mặc định cho ngày và giờ
         const updatedFormData = {...formData};
         
-        // Tự động điều chỉnh ngày mặc định thành ngày mai
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const year = tomorrow.getFullYear();
-        const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
-        const day = String(tomorrow.getDate()).padStart(2, '0');
-        updatedFormData.date = `${year}-${month}-${day}`;
+        // Kiểm tra xem có giá trị mặc định cho trường ngày từ admin không
+        if (data.fields.date?.defaultValue && data.fields.date.defaultValue.trim() !== '') {
+          // Sử dụng giá trị mặc định từ admin
+          console.log('Sử dụng ngày mặc định từ admin:', data.fields.date.defaultValue);
+          
+          // Chuyển đổi định dạng ngày từ admin (có thể là dd/mm/yyyy hoặc mm/dd/yyyy) sang định dạng ISO (yyyy-mm-dd)
+          let defaultDate = data.fields.date.defaultValue;
+          const dateFormat = data.fields.date.dateFormat || 'dd/mm/yyyy';
+          
+          // Log để debug
+          console.log(`Xử lý ngày mặc định: ${defaultDate}, định dạng: ${dateFormat}`);
+          
+          // Kiểm tra xem ngày đã ở định dạng ISO chưa
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(defaultDate)) {
+            // Nếu chưa, thực hiện chuyển đổi
+            if (dateFormat === 'dd/mm/yyyy') {
+              // Chuyển từ dd/mm/yyyy sang yyyy-mm-dd
+              const parts = defaultDate.split('/');
+              if (parts.length === 3) {
+                defaultDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                console.log(`Đã chuyển từ dd/mm/yyyy sang yyyy-mm-dd: ${defaultDate}`);
+              }
+            } else if (dateFormat === 'mm/dd/yyyy') {
+              // Chuyển từ mm/dd/yyyy sang yyyy-mm-dd
+              const parts = defaultDate.split('/');
+              if (parts.length === 3) {
+                defaultDate = `${parts[2]}-${parts[0]}-${parts[1]}`;
+                console.log(`Đã chuyển từ mm/dd/yyyy sang yyyy-mm-dd: ${defaultDate}`);
+              }
+            }
+          } else {
+            console.log(`Ngày đã ở định dạng ISO: ${defaultDate}`);
+          }
+          
+          // Kiểm tra tính hợp lệ của định dạng ngày
+          if (/^\d{4}-\d{2}-\d{2}$/.test(defaultDate)) {
+            updatedFormData.date = defaultDate;
+            console.log(`Đã thiết lập ngày mặc định: ${defaultDate}`);
+          } else {
+            console.warn('Định dạng ngày mặc định không hợp lệ:', defaultDate);
+            // Sử dụng ngày mai làm giá trị mặc định nếu định dạng không hợp lệ
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const year = tomorrow.getFullYear();
+            const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+            const day = String(tomorrow.getDate()).padStart(2, '0');
+            updatedFormData.date = `${year}-${month}-${day}`;
+            console.log(`Sử dụng ngày mai làm mặc định: ${updatedFormData.date}`);
+          }
+        } else {
+          // Không có giá trị mặc định từ admin, sử dụng ngày mai làm giá trị mặc định
+          console.log('Không có ngày mặc định từ admin, sử dụng ngày mai');
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const year = tomorrow.getFullYear();
+          const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+          const day = String(tomorrow.getDate()).padStart(2, '0');
+          updatedFormData.date = `${year}-${month}-${day}`;
+        }
         
         // Sử dụng giá trị mặc định cho giờ nếu có
         if (data.fields.time?.defaultValue) {
           updatedFormData.time = data.fields.time.defaultValue;
         }
+        
+        // Log thông tin về định dạng ngày
+        console.log('Định dạng ngày từ cấu hình:', data.fields.date?.dateFormat || 'dd/mm/yyyy');
         
         setFormData(updatedFormData);
         
@@ -198,80 +471,23 @@ export default function RegisterPage(): React.ReactElement {
     }
   };
   
-  // Hàm kiểm tra trạng thái form (mở/đóng)
+  // Hàm kiểm tra trạng thái form (mở/đóng) - đã đơn giản hóa vì xóa chức năng đặt lịch
   const checkFormStatus = async (): Promise<boolean> => {
     try {
-      // Kiểm tra sessionStorage trước
-      const storedFormClosed = sessionStorage.getItem('formClosed');
-      if (storedFormClosed === 'true') {
-        const storedMessage = sessionStorage.getItem('closedFormMessage');
-        console.log('Form đã đóng theo sessionStorage, hiển thị ClosedFormPage');
-        setFormClosed(true);
-        setClosedFormMessage(storedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.');
-        return false;
-      }
+      console.log('Form luôn mở vì đã xóa chức năng đặt lịch');
       
-      console.log('Kiểm tra trạng thái form từ server...');
-      const response = await fetch('/api/form-status', {
-        cache: 'no-store', // Đảm bảo luôn lấy dữ liệu mới nhất
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      // Xóa trạng thái đóng form trong sessionStorage nếu có
+      sessionStorage.removeItem('formClosed');
+      sessionStorage.removeItem('closedFormMessage');
       
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Kết quả kiểm tra trạng thái form từ server:', data);
-        
-        // Nếu form đã đóng, cập nhật state và sessionStorage để hiển thị ClosedFormPage
-        if (!data.isOpen) {
-          console.log('Form đã đóng theo server, hiển thị ClosedFormPage với thông báo:', data.message);
-          setFormClosed(true);
-          setClosedFormMessage(data.message || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.');
-          
-          // Lưu trạng thái đóng form vào sessionStorage
-          sessionStorage.setItem('formClosed', 'true');
-          sessionStorage.setItem('closedFormMessage', data.message || 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.');
-          
-          return false;
-        } else {
-          // Nếu form đã mở, xóa trạng thái đóng form trong sessionStorage
-          console.log('Form đang mở theo server, xóa trạng thái đóng trong sessionStorage');
-          sessionStorage.removeItem('formClosed');
-          sessionStorage.removeItem('closedFormMessage');
-          setFormClosed(false);
-        }
-        
-        return data.isOpen;
-      }
+      // Cập nhật state
+      setFormClosed(false);
+      setClosedFormMessage('');
       
-      // Nếu không thể kết nối với server, kiểm tra lại sessionStorage
-      const formClosedInStorage = sessionStorage.getItem('formClosed');
-      if (formClosedInStorage === 'true') {
-        const messageInStorage = sessionStorage.getItem('closedFormMessage');
-        console.log('Không thể kết nối server, sử dụng trạng thái từ sessionStorage');
-        setFormClosed(true);
-        setClosedFormMessage(messageInStorage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.');
-        return false;
-      }
-      
-      return true; // Mặc định cho phép đăng ký nếu không thể kiểm tra
+      return true; // Form luôn mở
     } catch (error) {
       console.error('Lỗi khi kiểm tra trạng thái form:', error);
-      
-      // Nếu có lỗi, kiểm tra sessionStorage
-      const formClosedInStorage = sessionStorage.getItem('formClosed');
-      if (formClosedInStorage === 'true') {
-        const messageInStorage = sessionStorage.getItem('closedFormMessage');
-        console.log('Lỗi khi kiểm tra server, sử dụng trạng thái từ sessionStorage');
-        setFormClosed(true);
-        setClosedFormMessage(messageInStorage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.');
-        return false;
-      }
-      
-      return true; // Mặc định cho phép đăng ký nếu có lỗi và không có trạng thái đóng trong sessionStorage
+      return true; // Mặc định cho phép đăng ký
     }
   };
 
@@ -456,8 +672,37 @@ export default function RegisterPage(): React.ReactElement {
     });
     
     // Lắng nghe sự kiện thay đổi trạng thái form (mở/đóng)
-    socketRef.current.on('form-status-changed', (data: { isOpen: boolean; message: string }) => {
+    socketRef.current.on('form-status-changed', async (data: { isOpen: boolean; message: string }) => {
       console.log('Nhận thông báo thay đổi trạng thái form:', data);
+      
+      // Kiểm tra trước tiên xem tính năng đặt lịch có bị tắt không
+      try {
+        const configResponse = await fetch('/api/form-config', {
+          cache: 'no-store',
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (configResponse.ok) {
+          const configData = await configResponse.json();
+          
+          // Form luôn mở vì đã xóa chức năng đặt lịch
+          console.log('Form luôn mở vì đã xóa chức năng đặt lịch');
+          
+          // Xóa trạng thái đóng form trong sessionStorage nếu có
+          sessionStorage.removeItem('formClosed');
+          sessionStorage.removeItem('closedFormMessage');
+          
+          // Cập nhật state
+          setFormClosed(false);
+          setClosedFormMessage('');
+        }
+      } catch (error) {
+        console.error('Lỗi khi kiểm tra cấu hình form:', error);
+      }
       
       // Cập nhật trạng thái form ngay lập tức
       if (!data.isOpen) {
@@ -711,6 +956,9 @@ export default function RegisterPage(): React.ReactElement {
       setLoading(false);
       return;
     }
+    
+    // Log thông tin về định dạng ngày khi gửi form
+    console.log('Gửi form với định dạng ngày:', formConfig?.fields.date?.dateFormat || 'dd/mm/yyyy');
     
     // Kiểm tra trạng thái form (mở/đóng) trước khi gửi đăng ký
     try {
@@ -1030,31 +1278,7 @@ export default function RegisterPage(): React.ReactElement {
   
   // Hiển thị thông báo khi form bị đóng
   const renderFormClosedMessage = () => {
-    if (formConfig?.isFormClosed) {
-      return (
-        <div style={{ 
-          backgroundColor: '#ffebee', 
-          color: '#d32f2f', 
-          padding: '15px',
-          borderRadius: '5px',
-          marginBottom: '20px',
-          fontSize: '0.95rem',
-          border: '1px solid #ffcdd2',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <div>
-            <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Form đã đóng</p>
-            <p style={{ margin: '0' }}>Form đăng ký hiện đã đóng. Vui lòng quay lại sau.</p>
-          </div>
-        </div>
-      );
-    }
+    // Form luôn mở vì đã xóa chức năng đặt lịch
     return null;
   };
 
@@ -1182,8 +1406,8 @@ export default function RegisterPage(): React.ReactElement {
   }
 
   // Hiển thị form đăng ký
-  // Nếu form đã đóng (từ API hoặc từ cấu hình), hiển thị trang ClosedFormPage
-  if (formClosed || formConfig?.isFormClosed) {
+  // Nếu form đã đóng (từ API), hiển thị trang ClosedFormPage
+  if (formClosed) {
     console.log('Form đã đóng, hiển thị ClosedFormPage');
     const message = closedFormMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.';
     return <ClosedFormPage message={message} />;
@@ -1201,11 +1425,11 @@ export default function RegisterPage(): React.ReactElement {
         ) : (
           <>
             <h1 className="card-title">{formConfig?.title || 'Đăng ký lên văn phòng'}</h1> 
-            {/* Hiển thị thông tin về giới hạn đăng ký nếu form không bị đóng */}
-            {!formConfig?.isFormClosed && renderRegistrationLimitInfo()}
+            {/* Hiển thị thông tin về giới hạn đăng ký */}
+            {renderRegistrationLimitInfo()}
             
-            {/* Hiển thị thông báo khi đạt giới hạn nếu form không bị đóng */}
-            {!formConfig?.isFormClosed && renderLimitReachedMessage()}
+            {/* Hiển thị thông báo khi đạt giới hạn */}
+            {renderLimitReachedMessage()}
             {/* Xóa phần code dưới đây để tránh hiển thị trùng lặp */}
             {false && limitReached && formConfig?.registrationLimit?.enabled && (
               <div style={{ 
@@ -1233,61 +1457,62 @@ export default function RegisterPage(): React.ReactElement {
             )}
             
             {/* Chỉ hiển thị form nếu form không bị đóng */}
-            {!formConfig?.isFormClosed && (
+            {(
               <form onSubmit={handleSubmit} style={{ opacity: limitReached ? '0.7' : '1', pointerEvents: limitReached ? 'none' : 'auto' }}>
-              {/* Họ và tên */}
-              {formConfig?.fields.name?.enabled && (
-                <div className="form-group">
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    className="form-input"
-                    placeholder={`${formConfig.fields.name.label} ${formConfig.fields.name.required ? '*' : ''}`}
-                    required={formConfig.fields.name.required}
-                    value={formData.name}
-                    onChange={handleChange}
-                    disabled={floorLimitReached}
-                  />
-                </div>
-              )}
-              
-              {/* Số điện thoại */}
-              {formConfig?.fields.phone?.enabled && (
-                <div className="form-group">
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    className="form-input"
-                    placeholder={`${formConfig.fields.phone.label} ${formConfig.fields.phone.required ? '*' : ''}`}
-                    required={formConfig.fields.phone.required}
-                    pattern="[0-9]*"
-                    title="Số điện thoại chỉ được chứa số"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    disabled={floorLimitReached}
-                  />
-                </div>
-              )}
-              
-              {/* Email */}
-              {formConfig?.fields.email?.enabled && (
-                <div className="form-group">
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder={`${formConfig.fields.email.label} ${formConfig.fields.email.required ? '*' : ''}`}
-                    required={formConfig.fields.email.required}
-                    pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-                    title="Email phải đúng định dạng và chứa ký tự @"
-                    value={formData.email}
-                    onChange={handleChange}
-                    disabled={floorLimitReached}
-                  />
-                </div>
-              )}
+              {/* Render tất cả các trường cơ bản theo thứ tự của admin */}
+              {formConfig && Object.entries(formConfig.fields)
+                .filter(([fieldName, field]) => 
+                  field.enabled && 
+                  !field.isCustom && 
+                  fieldName !== 'date' && 
+                  fieldName !== 'time' &&
+                  !['school', 'studentId', 'purpose', 'floor', 'contact'].includes(fieldName)
+                )
+                // Sắp xếp các trường theo thứ tự nếu có thuộc tính order
+                .sort(([, fieldA], [, fieldB]) => {
+                  const orderA = fieldA.order !== undefined ? fieldA.order : 999;
+                  const orderB = fieldB.order !== undefined ? fieldB.order : 999;
+                  return orderA - orderB;
+                })
+                .map(([fieldName, field]) => {
+                  // Xác định loại trường dựa vào fieldType hoặc tên trường
+                  const fieldType = field.fieldType || (
+                    fieldName === 'email' ? 'email' :
+                    fieldName === 'phone' ? 'tel' :
+                    'text'
+                  );
+                  
+                  // Xác định các thuộc tính bổ sung dựa vào loại trường
+                  const additionalProps: any = {};
+                  
+                  if (fieldType === 'tel' || fieldName === 'phone') {
+                    additionalProps.pattern = "[0-9]*";
+                    additionalProps.title = "Số điện thoại chỉ được chứa số";
+                  }
+                  
+                  if (fieldType === 'email' || fieldName === 'email') {
+                    additionalProps.pattern = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$";
+                    additionalProps.title = "Email phải đúng định dạng và chứa ký tự @";
+                  }
+                  
+                  return (
+                    <div key={fieldName} className="form-group">
+                      <input
+                        id={fieldName}
+                        name={fieldName}
+                        type={fieldType}
+                        className="form-input"
+                        placeholder={field.placeholder || field.label}
+                        required={field.required}
+                        value={formData[fieldName] || ''}
+                        onChange={handleChange}
+                        disabled={floorLimitReached}
+                        {...additionalProps}
+                      />
+                    </div>
+                  );
+                })
+              }
               
               {/* Trường đại học */}
               {formConfig?.fields.school?.enabled && (
@@ -1300,7 +1525,7 @@ export default function RegisterPage(): React.ReactElement {
                     required={formConfig.fields.school.required}
                     disabled={floorLimitReached}
                   >
-                    <option value="" disabled>{`${formConfig.fields.school.label} ${formConfig.fields.school.required ? '*' : ''}`}</option>
+                    <option value="" disabled>{formConfig.fields.school.label}</option>
                     {formConfig.fields.school.options?.map((option, index) => (
                       <option key={index} value={option}>{option}</option>
                     ))}
@@ -1315,7 +1540,7 @@ export default function RegisterPage(): React.ReactElement {
                     id="studentId"
                     name="studentId"
                     type="text"
-                    placeholder={`${formConfig.fields.studentId.label} ${formConfig.fields.studentId.required ? '*' : ''}`}
+                    placeholder={formConfig.fields.studentId.placeholder || formConfig.fields.studentId.label}
                     required={formConfig.fields.studentId.required}
                     value={formData.studentId}
                     onChange={handleChange}
@@ -1334,7 +1559,7 @@ export default function RegisterPage(): React.ReactElement {
                     required={formConfig.fields.purpose.required}
                     disabled={floorLimitReached}
                   >
-                    <option value="" disabled>{`${formConfig.fields.purpose.label} ${formConfig.fields.purpose.required ? '*' : ''}`}</option>
+                    <option value="" disabled>{formConfig.fields.purpose.label}</option>
                     {formConfig.fields.purpose.options?.map((option, index) => (
                       <option key={index} value={option}>{option}</option>
                     ))}
@@ -1354,7 +1579,7 @@ export default function RegisterPage(): React.ReactElement {
                     style={{ borderColor: floorLimitReached ? '#ff9800' : '' }}
                   >
                     <option value="" disabled>
-                      {`${formConfig.fields.floor.label} ${formConfig.fields.floor.required ? '*' : ''}`}
+                      {formConfig.fields.floor.label}
                     </option>
                     {formConfig.fields.floor.options?.map((option, index) => {
                       // Xác định giới hạn cho từng tầng từ cấu hình form
@@ -1398,26 +1623,303 @@ export default function RegisterPage(): React.ReactElement {
                 </div>
               )}
 
+              {/* Các trường tùy chỉnh */}
+              {Object.keys(formConfig?.fields || {})
+                // Sắp xếp các trường theo thứ tự nếu có thuộc tính order
+                .sort((fieldNameA, fieldNameB) => {
+                  const fieldA = formConfig?.fields[fieldNameA];
+                  const fieldB = formConfig?.fields[fieldNameB];
+                  const orderA = fieldA?.order !== undefined ? fieldA.order : 999;
+                  const orderB = fieldB?.order !== undefined ? fieldB.order : 999;
+                  return orderA - orderB;
+                })
+                .map(fieldName => {
+                const field = formConfig?.fields[fieldName];
+                
+                // Kiểm tra nếu là trường tùy chỉnh và đã được bật
+                if (field?.isCustom && field?.enabled) {
+                  
+                  return (
+                    <div key={fieldName} className="form-group">
+                      {field.fieldType === 'text' && (
+                        <TextField
+                          id={fieldName}
+                          name={fieldName}
+                          label={field.placeholder || field.label}
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          required={field.required}
+                          value={formData[fieldName] || ''}
+                          onChange={handleChange}
+                          disabled={floorLimitReached}
+                          className="mui-textfield"
+                          InputProps={{
+                            endAdornment: fieldName === 'name' && (
+                              <span className="input-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                  <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                              </span>
+                            )
+                          }}
+                        />
+                      )}
+                      
+                      {field.fieldType === 'textarea' && (
+                        <textarea
+                          id={fieldName}
+                          name={fieldName}
+                          className="form-textarea"
+                          placeholder={field.placeholder || field.label}
+                          required={field.required}
+                          value={formData[fieldName] || ''}
+                          onChange={handleChange}
+                          disabled={floorLimitReached}
+                          rows={4}
+                        />
+                      )}
+                      
+                      {field.fieldType === 'dropdown' && (
+                        <select
+                          id={fieldName}
+                          name={fieldName}
+                          value={formData[fieldName] || ''}
+                          onChange={handleChange}
+                          required={field.required}
+                          disabled={floorLimitReached}
+                        >
+                          <option value="" disabled>{field.label}</option>
+                          {field.options?.map((option, index) => (
+                            <option key={index} value={typeof option === 'string' ? option : option.value}>
+                              {typeof option === 'string' ? option : option.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      
+                      {field.fieldType === 'email' && (
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          type="email"
+                          className="form-input"
+                          placeholder={field.placeholder || field.label}
+                          required={field.required}
+                          value={formData[fieldName] || ''}
+                          onChange={handleChange}
+                          disabled={floorLimitReached}
+                        />
+                      )}
+                      
+                      {field.fieldType === 'number' && (
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          type="number"
+                          className="form-input"
+                          placeholder={field.placeholder || field.label}
+                          required={field.required}
+                          value={formData[fieldName] || ''}
+                          onChange={handleChange}
+                          disabled={floorLimitReached}
+                        />
+                      )}
+                      
+                      {field.fieldType === 'date' && (
+                        <>
+                          {field.allowDateChange ? (
+                            // Khi cho phép thay đổi ngày: hiển thị MUI DatePicker với định dạng từ cấu hình
+                            <div className="datepicker-container">
+                              <DatePicker
+                                label={field.placeholder || field.label}
+                                value={formData[fieldName] ? parseDateToDayjs(formData[fieldName]) : null}
+                                onChange={(date) => {
+                                  // Chuyển đổi date thành chuỗi với định dạng yyyy-MM-dd cho formData
+                                  const dateStr = date ? date.format('YYYY-MM-DD') : '';
+                                  const event = {
+                                    target: {
+                                      name: fieldName,
+                                      value: dateStr
+                                    }
+                                  } as React.ChangeEvent<HTMLInputElement>;
+                                  handleChange(event);
+                                }}
+                                format={getDatePickerFormat(field.dateFormat)}
+                                disabled={floorLimitReached}
+                                slotProps={{
+                                  textField: {
+                                    id: fieldName,
+                                    name: fieldName,
+                                    required: field.required,
+                                    fullWidth: true,
+                                    variant: "outlined",
+                                    size: "small",
+                                    className: "mui-datepicker"
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            // Khi không cho phép thay đổi ngày: hiển thị input type="text" chỉ đọc
+                            <>
+                              <input
+                                id={fieldName}
+                                name={fieldName}
+                                type="text"
+                                className="form-input"
+                                required={field.required}
+                                value={(() => {
+                                  // Nếu có giá trị mặc định từ admin, sử dụng nó
+                                  if (field.defaultValue && field.defaultValue.trim() !== '') {
+                                    return field.defaultValue;
+                                  }
+                                  
+                                  // Nếu có giá trị trong formData, sử dụng nó đã được định dạng
+                                  if (formData[fieldName]) {
+                                    return formatDate(formData[fieldName], field.dateFormat);
+                                  }
+                                  
+                                  // Nếu không có cả hai, hiển thị ngày mai
+                                  const tomorrow = new Date();
+                                  tomorrow.setDate(tomorrow.getDate() + 1);
+                                  const year = tomorrow.getFullYear();
+                                  const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+                                  const day = String(tomorrow.getDate()).padStart(2, '0');
+                                  
+                                  // Định dạng ngày mai theo định dạng được cấu hình
+                                  if (field.dateFormat === 'dd/mm/yyyy') {
+                                    return `${day}/${month}/${year}`;
+                                  } else if (field.dateFormat === 'mm/dd/yyyy') {
+                                    return `${month}/${day}/${year}`;
+                                  } else {
+                                    return `${year}-${month}-${day}`;
+                                  }
+                                })()}
+                                readOnly
+                                style={{ backgroundColor: '#f9f9f9', cursor: 'default' }}
+                              />
+                              {console.log(`Debug: Hiển thị ngày (không cho phép thay đổi): ${formData[fieldName]}, định dạng: ${field.dateFormat}, giá trị mặc định: ${field.defaultValue}`)}
+                            </>
+                          )}
+                        </>
+                      )}
+                      
+                      {field.fieldType === 'time' && (
+                        <>
+                          {field.allowTimeChange ? (
+                            // Khi cho phép thay đổi thời gian: hiển thị MUI TimePicker
+                            <div className="datepicker-container">
+                              <TimePicker
+                                label={field.placeholder || field.label}
+                                value={formData[fieldName] ? parseTimeToDayjs(formData[fieldName]) : null}
+                                onChange={(time) => {
+                                  // Chuyển đổi time thành chuỗi với định dạng HH:mm cho formData
+                                  const timeStr = time ? time.format('HH:mm') : '';
+                                  const event = {
+                                    target: {
+                                      name: fieldName,
+                                      value: timeStr
+                                    }
+                                  } as React.ChangeEvent<HTMLInputElement>;
+                                  handleChange(event);
+                                }}
+                                format={getTimePickerFormat(field.timeFormat)}
+                                ampm={field.timeFormat === '12h'}
+                                disabled={floorLimitReached}
+                                slotProps={{
+                                  textField: {
+                                    id: fieldName,
+                                    name: fieldName,
+                                    required: field.required,
+                                    fullWidth: true,
+                                    variant: "outlined",
+                                    size: "small",
+                                    className: "mui-timepicker"
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            // Khi không cho phép thay đổi thời gian: hiển thị input type="text" chỉ đọc
+                            <input
+                              id={fieldName}
+                              name={fieldName}
+                              type="text"
+                              className="form-input"
+                              required={field.required}
+                              value={(() => {
+                                // Nếu có giá trị mặc định từ admin, sử dụng nó
+                                if (field.defaultValue && field.defaultValue.trim() !== '') {
+                                  // Định dạng lại thời gian nếu cần
+                                  return formatTimeValue(field.defaultValue, field.timeFormat);
+                                }
+                                
+                                // Nếu có giá trị trong formData, sử dụng nó
+                                if (formData[fieldName]) {
+                                  return formatTimeValue(formData[fieldName], field.timeFormat);
+                                }
+                                
+                                // Nếu không có cả hai, hiển thị thời gian hiện tại
+                                const now = new Date();
+                                const hours = String(now.getHours()).padStart(2, '0');
+                                const minutes = String(now.getMinutes()).padStart(2, '0');
+                                
+                                // Định dạng thời gian theo định dạng được cấu hình
+                                if (field.timeFormat === '12h') {
+                                  const hour12 = now.getHours() % 12 || 12;
+                                  const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+                                  return `${String(hour12).padStart(2, '0')}:${minutes} ${ampm}`;
+                                } else {
+                                  return `${hours}:${minutes}`;
+                                }
+                              })()}
+                              readOnly
+                              style={{ backgroundColor: '#f9f9f9', cursor: 'default' }}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })}
+              
               {/* Ngày đăng ký */}
               {formConfig?.fields.date?.enabled && (
-                <DateField 
-                  label={formConfig.fields.date.label}
-                  required={formConfig.fields.date.required}
-                  value={formData.date}
-                  onChange={handleChange}
-                  disabled={floorLimitReached}
-                />
+                <div className="form-group">
+                  <input
+                    id="date"
+                    name="date"
+                    type="text"
+                    className="form-input"
+                    placeholder={formConfig.fields.date.placeholder || formConfig.fields.date.label}
+                    required={formConfig.fields.date.required}
+                    value={formatDate(formData.date, formConfig.fields.date.dateFormat)}
+                    readOnly={true}
+                    disabled={floorLimitReached}
+                    style={{ backgroundColor: '#f0f0f0' }}
+                  />
+                </div>
               )}
               
               {/* Giờ */}
               {formConfig?.fields.time?.enabled && (
-                <TimeField 
-                  label={formConfig.fields.time.label}
-                  required={formConfig.fields.time.required}
-                  value={formData.time}
-                  onChange={handleChange}
-                  disabled={floorLimitReached}
-                />
+                <div className="form-group">
+                  <input
+                    id="time"
+                    name="time"
+                    type="time"
+                    className="form-input"
+                    placeholder={formConfig.fields.time.placeholder || formConfig.fields.time.label}
+                    required={formConfig.fields.time.required}
+                    value={formData.time}
+                    onChange={handleChange}
+                    disabled={floorLimitReached}
+                  />
+                </div>
               )}
               
               {/* Người liên hệ */}
@@ -1430,7 +1932,7 @@ export default function RegisterPage(): React.ReactElement {
                     required={formConfig.fields.contact.required}
                     disabled={floorLimitReached}
                   >
-                    <option value="" disabled>{`${formConfig.fields.contact.label} ${formConfig.fields.contact.required ? '*' : ''}`}</option>
+                    <option value="" disabled>{formConfig.fields.contact.label}</option>
                     {formConfig.fields.contact.options?.map((option, index) => (
                       <option key={index} value={option}>{option}</option>
                     ))}

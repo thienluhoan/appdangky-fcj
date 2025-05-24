@@ -2,17 +2,10 @@ import { NextResponse } from 'next/server';
 
 // Hàm kiểm tra xem form có đang mở hay không dựa trên thời gian hiện tại
 function isFormOpen(formConfig: any): { isOpen: boolean; message: string } {
-  // Kiểm tra trạng thái đóng form thủ công trước tiên
-  if (formConfig.isFormClosed) {
-    return { 
-      isOpen: false, 
-      message: formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.'
-    };
-  }
-
   // Nếu không có cấu hình lịch trình hoặc tính năng không được bật
   const formSchedule = formConfig.formSchedule;
   if (!formSchedule || !formSchedule.enabled) {
+    // Nếu tính năng đặt lịch bị tắt, form sẽ luôn được mở
     return { isOpen: true, message: '' };
   }
 
@@ -51,21 +44,11 @@ function isFormOpen(formConfig: any): { isOpen: boolean; message: string } {
 
 export async function GET() {
   try {
-    // Lấy cấu hình form từ API
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/form-config`, {
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      // Nếu không lấy được cấu hình, mặc định cho phép truy cập
-      return NextResponse.json({ isOpen: true, message: '' });
-    }
-
-    const formConfig = await response.json();
-    // Truyền toàn bộ formConfig để có thể kiểm tra cả isFormClosed và formSchedule
-    const formStatus = isFormOpen(formConfig);
-
-    return NextResponse.json(formStatus);
+    // Đã xóa chức năng đặt lịch, form luôn mở
+    console.log('Form luôn mở vì đã xóa chức năng đặt lịch');
+    
+    // Trả về trạng thái form luôn mở
+    return NextResponse.json({ isOpen: true, message: '' });
   } catch (error) {
     console.error('Lỗi khi kiểm tra trạng thái form:', error);
     // Trong trường hợp lỗi, mặc định cho phép truy cập

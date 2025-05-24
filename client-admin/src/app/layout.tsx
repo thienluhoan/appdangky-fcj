@@ -186,7 +186,7 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
           newestOnTop
           closeOnClick
           rtl={false}
-          pauseOnFocusLoss
+          pauseOnFocusLoss={false}
           draggable
           pauseOnHover
         />

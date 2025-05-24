@@ -1,0 +1,38 @@
+/* Field header and delete button styling */
+.field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.field-header h4 {
+  margin: 0;
+  padding: 0;
+}
+
+.delete-field-button {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+}
+
+.delete-field-button:hover {
+  background-color: #dc2626;
+  transform: scale(1.1);
+}

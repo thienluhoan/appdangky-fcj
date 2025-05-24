@@ -1,22 +1,36 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import './styles.css';
-import './form-schedule.css';
-import './time-picker.css';
 import './switch-toggle.css';
+import './delete-button.css';
+import './time-picker.css';
+import './form-builder.css';
 import Modal from '../components/Modal';
-import CustomTimePicker from '../components/CustomTimePicker';
 import { toast } from 'react-toastify';
+import FormBuilder, { FieldType, FormBuilderField, FieldOption } from '../components/FormBuilder';
+
+// Sử dụng FieldOption từ FormBuilder thay vì định nghĩa lại
+// interface FieldOption {
+//   value: string;
+//   label: string;
+// }
 
 // Định nghĩa kiểu dữ liệu cho cấu hình form
 interface FieldConfig {
   label: string;
   required: boolean;
   enabled: boolean;
-  options?: string[];
+  options?: (string | FieldOption)[];
   defaultValue?: string;
+  fieldType?: string;
+  placeholder?: string;
+  isCustom?: boolean;
+  allowDateChange?: boolean; // Thêm thuộc tính cho phép thay đổi ngày
+  dateFormat?: string; // Định dạng hiển thị ngày (dd/mm/yyyy, mm/dd/yyyy, yyyy-mm-dd)
+  allowTimeChange?: boolean; // Thêm thuộc tính cho phép thay đổi thời gian
+  timeFormat?: string; // Định dạng hiển thị thời gian (24h hoặc 12h)
 }
 
 interface FloorLimit {
@@ -33,22 +47,13 @@ interface RegistrationLimitConfig {
   floorLimits?: FloorLimit[];
 }
 
-interface FormScheduleConfig {
-  enabled: boolean;
-  openTime: string;
-  closeTime: string;
-  openDays: number[];
-  closedMessage: string;
-}
-
 interface FormConfig {
   title: string;
-  isFormClosed?: boolean; // Thêm trường mới để đóng form
-  formSchedule?: FormScheduleConfig;
   registrationLimit?: RegistrationLimitConfig;
   fields: {
     [key: string]: FieldConfig;
   };
+  isFormClosed?: boolean;
 }
 
 export default function FormConfigPage() {
@@ -58,10 +63,6 @@ export default function FormConfigPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'fields' | 'limits'>('general');
-  const [isToggling, setIsToggling] = useState<boolean>(false); // Trạng thái khi đang toggle
-  
-  // Sử dụng useRef để lưu timeout cho debounce
-  const toggleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -97,8 +98,16 @@ export default function FormConfigPage() {
         let needsUpdate = false;
         const updatedFloorLimits = [...existingFloorLimits];
         
+        // Hàm để lấy giá trị từ option (hỗ trợ cả chuỗi và FieldOption)
+        const getOptionValue = (option: string | FieldOption): string => {
+          return typeof option === 'string' ? option : option.value;
+        };
+
+        // Chuyển đổi floorOptions thành mảng chuỗi
+        const floorOptionValues = floorOptions.map(option => getOptionValue(option));
+        
         // Thêm các tầng mới vào danh sách giới hạn
-        floorOptions.forEach(floorName => {
+        floorOptionValues.forEach(floorName => {
           if (!existingFloorNames.includes(floorName)) {
             updatedFloorLimits.push({
               floorName,
@@ -110,7 +119,7 @@ export default function FormConfigPage() {
         });
         
         // Lọc bỏ các tầng không còn tồn tại
-        const finalFloorLimits = updatedFloorLimits.filter(fl => floorOptions.includes(fl.floorName));
+        const finalFloorLimits = updatedFloorLimits.filter(fl => floorOptionValues.includes(fl.floorName));
         if (finalFloorLimits.length !== updatedFloorLimits.length) {
           needsUpdate = true;
         }
@@ -131,35 +140,29 @@ export default function FormConfigPage() {
     setActiveTab(tab);
   };
 
-  // Tải cấu hình form từ API và đồng bộ với trạng thái form thực tế
+  // Tải cấu hình form từ API
   useEffect(() => {
-    const fetchFormConfigAndStatus = async () => {
+    const fetchFormConfig = async () => {
       try {
-        // 1. Lấy cấu hình form từ API form-config
+        // Lấy cấu hình form từ API form-config (chỉ lấy dữ liệu từ database)
         const configResponse = await fetch('/api/form-config');
         
-        // 2. Đồng thời lấy trạng thái form hiện tại từ API form-status
-        const statusResponse = await fetch('http://localhost:3000/api/form-status');
-        
-        if (configResponse.ok && statusResponse.ok) {
+        if (configResponse.ok) {
           const configData = await configResponse.json();
-          const statusData = await statusResponse.json();
           
-          // Đồng bộ trạng thái form từ API form-status với cấu hình form
-          // isOpen = true tương ứng với isFormClosed = false và ngược lại
-          const formConfig = {
-            ...configData,
-            isFormClosed: !statusData.isOpen
-          };
+          // Đảm bảo các trường có thuộc tính options (nếu chưa có)
+          const updatedConfig = { ...configData };
           
-          // Cập nhật state với dữ liệu đã được đồng bộ
-          setFormConfig(formConfig);
-          console.log('Trạng thái form đã được đồng bộ:', statusData.isOpen ? 'Mở' : 'Đóng');
-        } else if (configResponse.ok) {
-          // Nếu chỉ lấy được cấu hình form mà không lấy được trạng thái
-          const configData = await configResponse.json();
-          setFormConfig(configData);
-          console.warn('Không thể đồng bộ trạng thái form, sử dụng trạng thái từ cấu hình');
+          // Đảm bảo các trường có thuộc tính options là một mảng (nếu chưa có)
+          Object.keys(updatedConfig.fields).forEach(fieldName => {
+            if (['floor', 'department', 'purpose', 'contact', 'school'].includes(fieldName)) {
+              if (!updatedConfig.fields[fieldName].options) {
+                updatedConfig.fields[fieldName].options = [];
+              }
+            }
+          });
+          
+          setFormConfig(updatedConfig);
         } else {
           setMessage({
             text: 'Không thể tải cấu hình form',
@@ -177,35 +180,74 @@ export default function FormConfigPage() {
       }
     };
 
-    fetchFormConfigAndStatus();
+    fetchFormConfig();
   }, []);
 
-  // Lưu cấu hình form - HOÀN TOÀN TÁCH BIỆT với trạng thái form
+  // Lưu cấu hình form
   const saveFormConfig = async () => {
     if (!formConfig) return;
 
-    // Lưu trạng thái đóng/mở form hiện tại
-    const currentFormClosedState = formConfig.isFormClosed;
-
     setSaving(true);
     try {
-      // Tạo bản sao của formConfig và LOẠI BỎ trạng thái isFormClosed
-      // Điều này đảm bảo nút "Lưu cấu hình" không lưu trạng thái form
-      const { isFormClosed, ...configWithoutFormStatus } = formConfig;
+      console.log('Saving form config:', JSON.stringify(formConfig, null, 2));
       
-      // Gửi cấu hình form đến server (không bao gồm trạng thái form)
+      // Đảm bảo các trường tùy chỉnh có cấu trúc đúng
+      const fieldsToSave = { ...formConfig.fields };
+      
+      // Chuyển đổi các options từ mảng chuỗi sang mảng đối tượng nếu cần
+      Object.keys(fieldsToSave).forEach(fieldName => {
+        const field = fieldsToSave[fieldName];
+        if (field.fieldType === 'dropdown' && Array.isArray(field.options)) {
+          field.options = field.options.map(option => {
+            if (typeof option === 'string') {
+              return { value: option, label: option };
+            }
+            return option;
+          });
+        }
+      });
+      
+      // Gửi cấu hình form đến server
+      const dataToSend = {
+        ...formConfig,
+        fields: fieldsToSave
+      };
+      
+      console.log('Sending data to server:', JSON.stringify(dataToSend, null, 2));
+      
       const response = await fetch('/api/form-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...configWithoutFormStatus,
-          isFormClosed: currentFormClosedState // Gửi lại trạng thái ban đầu, không thay đổi
-        }),
+        body: JSON.stringify(dataToSend),
       });
 
+      const responseData = await response.json();
+      console.log('Server response:', responseData);
+
       if (response.ok) {
+        // Tải lại dữ liệu từ server để đảm bảo giao diện được cập nhật đúng
+        try {
+          const refreshResponse = await fetch('/api/form-config');
+          if (refreshResponse.ok) {
+            const refreshedData = await refreshResponse.json();
+            console.log('Refreshed data from server:', refreshedData);
+            setFormConfig(refreshedData);
+            
+            // Làm mới trang để hiển thị các trường mới
+            // Chúng ta không cần setFields vì fields được tạo lại mỗi khi renderFieldsTab được gọi
+            // Tạo một tab mới và quay lại tab hiện tại để làm mới giao diện
+            const currentTab = activeTab;
+            setActiveTab('general');
+            setTimeout(() => {
+              setActiveTab(currentTab);
+            }, 50);
+          }
+        } catch (refreshError) {
+          console.error('Lỗi khi tải lại dữ liệu:', refreshError);
+        }
+        
         // Sử dụng toast thay vì modal để hiển thị thông báo thành công
         toast.success('Đã lưu cấu hình form thành công', {
           position: "top-right",
@@ -215,24 +257,10 @@ export default function FormConfigPage() {
           pauseOnHover: true,
           draggable: true,
         });
-        
-        // Đảm bảo trạng thái form không bị thay đổi sau khi lưu cấu hình
-        if (formConfig.isFormClosed !== currentFormClosedState) {
-          setFormConfig({
-            ...formConfig,
-            isFormClosed: currentFormClosedState
-          });
-        }
       } else {
-        const errorData = await response.json();
-        // Sử dụng toast.error thay vì modal để hiển thị thông báo lỗi
-        toast.error(errorData.message || 'Lỗi khi lưu cấu hình form', {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
+        setMessage({
+          text: responseData.message || 'Lỗi khi lưu cấu hình form',
+          type: 'error'
         });
       }
     } catch (error) {
@@ -250,74 +278,7 @@ export default function FormConfigPage() {
       setSaving(false);
     }
   };
-
-  // Xử lý thay đổi cấu hình mở/đóng form
-  const handleFormScheduleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (!formConfig) return;
-    
-    // Tạo một bản sao của formSchedule hoặc tạo mới nếu chưa có
-    const updatedSchedule = formConfig.formSchedule ? { ...formConfig.formSchedule } : {
-      enabled: false,
-      openTime: '08:00',
-      closeTime: '17:00',
-      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
-      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-    };
-    
-    // Cập nhật giá trị dựa trên loại input
-    if (type === 'checkbox') {
-      const checkbox = e.target as HTMLInputElement;
-      (updatedSchedule as any)[name] = checkbox.checked;
-    } else {
-      (updatedSchedule as any)[name] = value;
-    }
-    
-    // Cập nhật formConfig
-    setFormConfig({
-      ...formConfig,
-      formSchedule: updatedSchedule
-    });
-  };
   
-  // Xử lý thay đổi ngày mở cửa
-  const handleOpenDayChange = (day: number) => {
-    if (!formConfig) return;
-    
-    // Tạo một bản sao của formSchedule hoặc tạo mới nếu chưa có
-    const updatedSchedule = formConfig.formSchedule ? { ...formConfig.formSchedule } : {
-      enabled: false,
-      openTime: '08:00',
-      closeTime: '17:00',
-      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
-      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-    };
-    
-    // Kiểm tra xem ngày đã có trong danh sách chưa
-    const openDays = updatedSchedule.openDays || [];
-    const index = openDays.indexOf(day);
-    
-    // Nếu đã có thì xóa, nếu chưa có thì thêm
-    if (index !== -1) {
-      openDays.splice(index, 1);
-    } else {
-      openDays.push(day);
-    }
-    
-    // Sắp xếp lại danh sách ngày
-    openDays.sort((a, b) => a - b);
-    
-    // Cập nhật formConfig
-    setFormConfig({
-      ...formConfig,
-      formSchedule: {
-        ...updatedSchedule,
-        openDays
-      }
-    });
-  };
-
   // Xử lý thay đổi tiêu đề form
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!formConfig) return;
@@ -328,152 +289,46 @@ export default function FormConfigPage() {
     });
   };
 
-  // Biến để theo dõi thời gian cuối cùng toggle nút
-  const lastToggleTimeRef = useRef<number>(0);
-  
-  // Xử lý đóng/mở form với debounce mạnh hơn - hoàn toàn độc lập với nút "Lưu cấu hình"
-  const handleToggleFormClosed = () => {
-    // Kiểm tra điều kiện để tránh spam
-    const now = Date.now();
-    const timeSinceLastToggle = now - lastToggleTimeRef.current;
+  // Xử lý thay đổi trạng thái đóng/mở form
+  const handleFormStatusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!formConfig) return;
     
-    // Nếu đang trong quá trình toggle hoặc thời gian giữa 2 lần nhấn quá ngắn (dưới 1 giây), không làm gì
-    if (!formConfig || isToggling || timeSinceLastToggle < 1000) {
-      console.log('Bỏ qua yêu cầu toggle do quá nhanh hoặc đang xử lý');
-      return;
-    }
-    
-    // Cập nhật thời gian cuối cùng toggle
-    lastToggleTimeRef.current = now;
-    
-    // Đánh dấu đang trong quá trình toggle để tránh nhấn nhiều lần
-    setIsToggling(true);
-    
-    // Tạo trạng thái mới ngược lại với trạng thái hiện tại
-    const newIsFormClosed = !formConfig.isFormClosed;
-    console.log(`Đang chuyển trạng thái form sang: ${newIsFormClosed ? 'Đóng' : 'Mở'}`);
-    
-    // Cập nhật trạng thái UI ngay lập tức để người dùng thấy sự thay đổi
     setFormConfig({
       ...formConfig,
-      isFormClosed: newIsFormClosed
+      isFormClosed: e.target.checked
     });
-    
-    // Hủy bỏ timeout trước đó nếu có
-    if (toggleTimeoutRef.current) {
-      clearTimeout(toggleTimeoutRef.current);
-    }
-    
-    // Gửi thông báo thay đổi trạng thái form qua API form-status/notify với debounce
-    // KHÔNG gửi cấu hình form để đảm bảo tách biệt hoàn toàn với nút "Lưu cấu hình"
-    toggleTimeoutRef.current = setTimeout(async () => {
-      try {
-        console.log('Bắt đầu gửi thông báo thay đổi trạng thái form...');
-        
-        // Lấy thông báo khi đóng form từ cấu hình hoặc dùng thông báo mặc định
-        const message = newIsFormClosed ? 
-          (formConfig.formSchedule?.closedMessage || 'Form đăng ký hiện đã đóng. Vui lòng quay lại sau.') : 
-          '';
-        
-        // Thêm timeout để tránh chờ vô hạn nếu server không phản hồi
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
-        
-        // Gửi thông báo thay đổi trạng thái form
-        const response = await fetch('/api/form-status/notify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            isOpen: !newIsFormClosed,
-            message: message
-          }),
-          signal: controller.signal
-        });
-        
-        // Xóa timeout vì đã nhận được phản hồi
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          console.log(`Đã cập nhật trạng thái form thành công: ${newIsFormClosed ? 'Đóng' : 'Mở'}`);
-        } else {
-          console.error('Lỗi khi cập nhật trạng thái form:', await response.text());
-          // Nếu có lỗi, hoàn tác trạng thái UI về trạng thái ban đầu
-          setFormConfig({
-            ...formConfig,
-            isFormClosed: !newIsFormClosed
-          });
-        }
-      } catch (error: any) {
-        // Kiểm tra nếu là lỗi timeout hoặc kết nối bị từ chối
-        if (error.name === 'AbortError') {
-          console.error('Yêu cầu thay đổi trạng thái form đã hết thời gian chờ');
-        } else if (error.message && error.message.includes('Failed to fetch')) {
-          console.error('Không thể kết nối đến server. Hãy kiểm tra xem server đã khởi động chưa.');
-        } else {
-          console.error('Lỗi khi gửi thông báo thay đổi trạng thái form:', error);
-        }
-        
-        // Nếu có lỗi, hoàn tác trạng thái UI về trạng thái ban đầu
-        setFormConfig({
-          ...formConfig,
-          isFormClosed: !newIsFormClosed
-        });
-      } finally {
-        // Kết thúc quá trình toggle
-        setIsToggling(false);
-      }
-    }, 300); // Debounce 300ms để tránh gọi API liên tục khi nhấn nhiều lần
   };
-  // Xử lý thay đổi cấu hình giới hạn đăng ký
-  const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!formConfig || !formConfig.registrationLimit) return;
 
-    const { name, value, type, checked } = e.target;
+  // Xử lý thay đổi cấu hình giới hạn đăng ký
+  const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!formConfig) return;
     
-    let updatedRegistrationLimit = {
-      ...formConfig.registrationLimit,
-      [name]: type === 'checkbox' ? checked : name === 'maxRegistrationsPerDay' ? parseInt(value) : value
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    const isCheckbox = type === 'checkbox';
+    
+    // Tạo một bản sao của registrationLimit hoặc tạo mới nếu chưa có
+    const updatedLimit = formConfig.registrationLimit ? { ...formConfig.registrationLimit } : {
+      enabled: false,
+      maxRegistrationsPerDay: 50,
+      message: 'Đã đạt giới hạn đăng ký cho ngày hôm nay. Vui lòng quay lại vào ngày mai.',
+      byFloor: false,
+      floorLimits: []
     };
     
-    // Nếu tắt giới hạn đăng ký, tự động tắt cả giới hạn theo tầng
-    if (name === 'enabled' && !checked) {
-      updatedRegistrationLimit.byFloor = false;
+    // Cập nhật giá trị tương ứng
+    if (name === 'enabled' || name === 'byFloor') {
+      (updatedLimit as any)[name] = checked;
+    } else if (name === 'maxRegistrationsPerDay') {
+      updatedLimit.maxRegistrationsPerDay = parseInt(value, 10) || 0;
+    } else if (name === 'message') {
+      updatedLimit.message = value;
     }
     
-    // Nếu bật giới hạn theo tầng, tự động tạo cấu hình cho các tầng dựa trên danh sách tầng
-    if (name === 'byFloor' && checked) {
-      // Lấy danh sách tầng từ trường 'floor'
-      const floorOptions = formConfig.fields.floor?.options || [];
-      
-      // Tạo hoặc cập nhật danh sách giới hạn tầng
-      const existingFloorLimits = updatedRegistrationLimit.floorLimits || [];
-      const existingFloorNames = existingFloorLimits.map(fl => fl.floorName);
-      
-      // Tạo mảng mới với các tầng hiện tại và thêm các tầng mới
-      const updatedFloorLimits = [...existingFloorLimits];
-      
-      // Thêm các tầng mới vào danh sách giới hạn
-      floorOptions.forEach(floorName => {
-        if (!existingFloorNames.includes(floorName)) {
-          updatedFloorLimits.push({
-            floorName,
-            maxRegistrations: 3, // Giá trị mặc định
-            enabled: true
-          });
-        }
-      });
-      
-      // Lọc bỏ các tầng không còn tồn tại
-      const finalFloorLimits = updatedFloorLimits.filter(fl => floorOptions.includes(fl.floorName));
-      
-      updatedRegistrationLimit.floorLimits = finalFloorLimits;
-    }
-    
+    // Cập nhật formConfig
     setFormConfig({
       ...formConfig,
-      registrationLimit: updatedRegistrationLimit
+      registrationLimit: updatedLimit
     });
   };
 
@@ -482,10 +337,12 @@ export default function FormConfigPage() {
     if (!formConfig || !formConfig.registrationLimit || !formConfig.registrationLimit.floorLimits) return;
     
     const updatedFloorLimits = [...formConfig.registrationLimit.floorLimits];
-    updatedFloorLimits[index] = {
-      ...updatedFloorLimits[index],
-      [field]: field === 'maxRegistrations' ? parseInt(value) : value
-    };
+    
+    if (field === 'enabled') {
+      updatedFloorLimits[index].enabled = value;
+    } else if (field === 'maxRegistrations') {
+      updatedFloorLimits[index].maxRegistrations = parseInt(value, 10) || 0;
+    }
     
     setFormConfig({
       ...formConfig,
@@ -499,7 +356,7 @@ export default function FormConfigPage() {
   // Xử lý thay đổi trường form
   const handleFieldChange = (fieldName: string, property: string, value: string | boolean) => {
     if (!formConfig) return;
-
+    
     setFormConfig({
       ...formConfig,
       fields: {
@@ -513,9 +370,9 @@ export default function FormConfigPage() {
   };
 
   // Xử lý thay đổi tùy chọn của trường form
-  const handleOptionsChange = (fieldName: string, options: string[]) => {
+  const handleOptionsChange = (fieldName: string, options: (string | FieldOption)[]) => {
     if (!formConfig) return;
-
+    
     setFormConfig({
       ...formConfig,
       fields: {
@@ -531,331 +388,120 @@ export default function FormConfigPage() {
   // Thêm tùy chọn mới cho trường form
   const addOption = (fieldName: string) => {
     if (!formConfig) return;
-
-    const field = formConfig.fields[fieldName];
-    const options = field.options || [];
-    const newOptions = [...options, ''];
     
-    // Tạo bản sao của formConfig để cập nhật
-    const updatedFormConfig = {
-      ...formConfig,
-      fields: {
-        ...formConfig.fields,
-        [fieldName]: {
-          ...field,
-          options: newOptions
-        }
-      }
+    // Lấy danh sách tùy chọn hiện tại hoặc tạo mới nếu chưa có
+    const currentOptions = formConfig.fields[fieldName]?.options || [];
+    
+    // Tạo một tùy chọn mới với tên mặc định
+    const optionNumber = currentOptions.length + 1;
+    const newOption: FieldOption = {
+      value: `option${optionNumber}`,
+      label: `Tùy chọn ${optionNumber}`
     };
     
-    // Nếu đang thêm tầng mới và đã bật giới hạn theo tầng
-    if (fieldName === 'floor' && formConfig.registrationLimit?.byFloor && updatedFormConfig.registrationLimit) {
-      // Lấy danh sách giới hạn tầng hiện tại
-      const existingFloorLimits = [...(formConfig.registrationLimit.floorLimits || [])];
-      
-      // Thêm tầng mới với giá trị mặc định
-      existingFloorLimits.push({
-        floorName: '', // Giá trị ban đầu trống, sẽ được cập nhật sau khi người dùng nhập
-        maxRegistrations: 3, // Giá trị mặc định
-        enabled: true
-      });
-      
-      // Cập nhật danh sách giới hạn tầng
-      updatedFormConfig.registrationLimit = {
-        enabled: updatedFormConfig.registrationLimit.enabled,
-        maxRegistrationsPerDay: updatedFormConfig.registrationLimit.maxRegistrationsPerDay,
-        message: updatedFormConfig.registrationLimit.message,
-        byFloor: updatedFormConfig.registrationLimit.byFloor || false,
-        floorLimits: existingFloorLimits
-      };
-    }
-    
-    setFormConfig(updatedFormConfig);
+    // Cập nhật danh sách tùy chọn
+    handleOptionsChange(fieldName, [...currentOptions, newOption]);
   };
 
   // Cập nhật tùy chọn cho trường form
-  const updateOption = (fieldName: string, index: number, value: string) => {
+  const updateOption = (fieldName: string, index: number, value: string, isLabel = true) => {
     if (!formConfig) return;
-
-    const field = formConfig.fields[fieldName];
-    const options = [...(field.options || [])];
-    options[index] = value;
     
-    // Tạo bản sao của formConfig để cập nhật
-    const updatedFormConfig = {
-      ...formConfig,
-      fields: {
-        ...formConfig.fields,
-        [fieldName]: {
-          ...field,
-          options
-        }
-      }
-    };
+    // Lấy danh sách tùy chọn hiện tại
+    const currentOptions = [...(formConfig.fields[fieldName]?.options || [])];
     
-    // Nếu đang cập nhật trường floor và đã bật giới hạn theo tầng
-    if (fieldName === 'floor' && formConfig.registrationLimit?.byFloor && updatedFormConfig.registrationLimit) {
-      // Lấy danh sách giới hạn tầng hiện tại
-      const existingFloorLimits = [...(formConfig.registrationLimit.floorLimits || [])];
-      const existingFloorNames = existingFloorLimits.map(fl => fl.floorName);
-      
-      // Kiểm tra xem tầng đã có trong danh sách giới hạn chưa
-      if (!existingFloorNames.includes(value)) {
-        // Nếu chưa có, thêm vào danh sách giới hạn
-        existingFloorLimits.push({
-          floorName: value,
-          maxRegistrations: 3, // Giá trị mặc định
-          enabled: true
-        });
-        
-        // Cập nhật danh sách giới hạn tầng
-        updatedFormConfig.registrationLimit = {
-          enabled: updatedFormConfig.registrationLimit.enabled,
-          maxRegistrationsPerDay: updatedFormConfig.registrationLimit.maxRegistrationsPerDay,
-          message: updatedFormConfig.registrationLimit.message,
-          byFloor: updatedFormConfig.registrationLimit.byFloor || false,
-          floorLimits: existingFloorLimits
-        };
-      }
+    // Cập nhật giá trị tùy chọn tại vị trí index
+    const currentOption = currentOptions[index];
+    if (typeof currentOption === 'string') {
+      // Nếu là chuỗi, chuyển đổi thành đối tượng FieldOption
+      currentOptions[index] = {
+        value: isLabel ? `option${index + 1}` : value,
+        label: isLabel ? value : currentOption
+      };
+    } else {
+      // Nếu là đối tượng FieldOption, cập nhật thuộc tính phù hợp
+      currentOptions[index] = {
+        ...currentOption,
+        [isLabel ? 'label' : 'value']: value
+      };
     }
     
-    setFormConfig(updatedFormConfig);
+    // Cập nhật danh sách tùy chọn
+    handleOptionsChange(fieldName, currentOptions);
   };
 
   // Xóa tùy chọn cho trường form
   const removeOption = (fieldName: string, index: number) => {
     if (!formConfig) return;
-
-    const field = formConfig.fields[fieldName];
-    const options = [...(field.options || [])];
-    const removedOption = options[index];
-    options.splice(index, 1);
     
-    // Tạo bản sao của formConfig để cập nhật
-    const updatedFormConfig = {
-      ...formConfig,
-      fields: {
-        ...formConfig.fields,
-        [fieldName]: {
-          ...field,
-          options
-        }
-      }
-    };
+    // Lấy danh sách tùy chọn hiện tại
+    const currentOptions = [...(formConfig.fields[fieldName]?.options || [])];
     
-    // Nếu đang xóa option của trường floor và đã bật giới hạn theo tầng
-    if (fieldName === 'floor' && formConfig.registrationLimit?.byFloor && removedOption && updatedFormConfig.registrationLimit) {
-      // Lấy danh sách giới hạn tầng hiện tại
-      const existingFloorLimits = [...(formConfig.registrationLimit.floorLimits || [])];
-      
-      // Lọc bỏ tầng đã xóa khỏi danh sách giới hạn
-      const updatedFloorLimits = existingFloorLimits.filter(fl => fl.floorName !== removedOption);
-      
-      // Cập nhật danh sách giới hạn tầng
-      updatedFormConfig.registrationLimit = {
-        enabled: updatedFormConfig.registrationLimit.enabled,
-        maxRegistrationsPerDay: updatedFormConfig.registrationLimit.maxRegistrationsPerDay,
-        message: updatedFormConfig.registrationLimit.message,
-        byFloor: updatedFormConfig.registrationLimit.byFloor || false,
-        floorLimits: updatedFloorLimits
-      };
-    }
+    // Xóa tùy chọn tại vị trí index
+    currentOptions.splice(index, 1);
     
-    setFormConfig(updatedFormConfig);
+    // Cập nhật danh sách tùy chọn
+    handleOptionsChange(fieldName, currentOptions);
   };
 
-  // Xóa tùy chọn 
+  // Xử lý xóa tùy chọn
   const handleRemoveOption = (fieldName: string, index: number) => {
-    if (!formConfig || !formConfig.fields[fieldName]) return;
-
-    const updatedOptions = [...(formConfig.fields[fieldName].options || [])];
-    const removedOption = updatedOptions[index];
-    updatedOptions.splice(index, 1);
-
-    // Cập nhật formConfig với options mới
-    const updatedFormConfig = {
-      ...formConfig,
-      fields: {
-        ...formConfig.fields,
-        [fieldName]: {
-          ...formConfig.fields[fieldName],
-          options: updatedOptions
-        }
-      }
-    };
-
-    // Nếu đang xóa option của trường floor và đã bật giới hạn theo tầng
-    if (fieldName === 'floor' && formConfig.registrationLimit?.byFloor && removedOption && updatedFormConfig.registrationLimit) {
-      // Lấy danh sách giới hạn tầng hiện tại
-      const existingFloorLimits = [...(formConfig.registrationLimit.floorLimits || [])];
-      
-      // Lọc bỏ tầng đã xóa khỏi danh sách giới hạn
-      const updatedFloorLimits = existingFloorLimits.filter(fl => fl.floorName !== removedOption);
-      
-      // Cập nhật danh sách giới hạn tầng
-      updatedFormConfig.registrationLimit = {
-        enabled: updatedFormConfig.registrationLimit.enabled,
-        maxRegistrationsPerDay: updatedFormConfig.registrationLimit.maxRegistrationsPerDay,
-        message: updatedFormConfig.registrationLimit.message,
-        byFloor: updatedFormConfig.registrationLimit.byFloor || false,
-        floorLimits: updatedFloorLimits
-      };
-    }
-
-    setFormConfig(updatedFormConfig);
+    // Xóa tùy chọn trực tiếp không cần xác nhận
+    removeOption(fieldName, index);
   };
 
   // Render thông báo
   const renderMessage = () => {
     if (!message) return null;
-
-    // Chỉ hiển thị thông báo lỗi ở trên đầu
-    if (message.type === 'error') {
-      return (
-        <div className={`message ${message.type}`}>
-          {message.text}
-        </div>
-      );
-    }
     
-    // Thông báo thành công sẽ được hiển thị ở phần nút lưu
-    return null;
+    return (
+      <div className={`message ${message.type}`}>
+        <p>{message.text}</p>
+        <button onClick={() => setMessage(null)} className="close-button">
+          &times;
+        </button>
+      </div>
+    );
   };
 
   // Render tab cấu hình chung
   const renderGeneralTab = () => {
     if (!formConfig) return null;
 
-    // Khởi tạo formSchedule nếu chưa có
-    const formSchedule = formConfig.formSchedule || {
-      enabled: false,
-      openTime: '08:00',
-      closeTime: '17:00',
-      openDays: [1, 2, 3, 4, 5], // Thứ 2 đến thứ 6
-      closedMessage: 'Form đăng ký hiện đã đóng. Vui lòng quay lại trong giờ mở cửa.'
-    };
-
-    // Danh sách các ngày trong tuần
-    const weekdays = [
-      { value: 1, label: 'Thứ 2' },
-      { value: 2, label: 'Thứ 3' },
-      { value: 3, label: 'Thứ 4' },
-      { value: 4, label: 'Thứ 5' },
-      { value: 5, label: 'Thứ 6' },
-      { value: 6, label: 'Thứ 7' },
-      { value: 0, label: 'Chủ nhật' }
-    ];
-
     return (
       <div className="tab-content">
-        <div className="general-form">
+        <div className="general-section">
+          <h3>Cấu hình chung</h3>
+          
           <div className="form-group">
             <label htmlFor="title">Tiêu đề form</label>
             <input
               type="text"
               id="title"
+              name="title"
               value={formConfig.title}
               onChange={handleTitleChange}
               placeholder="Nhập tiêu đề form"
             />
           </div>
-          {/* Phần xem trước đã được xóa theo yêu cầu */}
           
-          {/* Phần cấu hình mở/đóng form theo giờ */}
-          <div className="form-schedule-section">
-            <h3>Đặt lịch đóng/mở form</h3>
-            
-            <div className="form-group">
-              <div className="toggle-group">
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    id="scheduleEnabled"
-                    name="enabled"
-                    checked={formSchedule.enabled}
-                    onChange={handleFormScheduleChange}
-                  />
-                  <span className="slider"></span>
-                </label>
-                <label htmlFor="scheduleEnabled">Bật tính năng đặt lịch đóng/mở form</label>
-              </div>
+          <div className="form-group">
+            <div className="toggle-group">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  id="isFormClosed"
+                  name="isFormClosed"
+                  checked={formConfig.isFormClosed || false}
+                  onChange={handleFormStatusChange}
+                />
+                <span className="slider"></span>
+              </label>
+              <label htmlFor="isFormClosed">Đóng form (form sẽ không nhận đăng ký mới)</label>
             </div>
-            
-            {formSchedule.enabled && (
-              <div className="schedule-config">
-                <div className="form-group time-group">
-                  <div className="time-picker-wrapper">
-                    <CustomTimePicker
-                      onChange={(value: string) => {
-                        if (!formConfig) return;
-                        
-                        // Tạo một bản sao của formSchedule
-                        const updatedSchedule = { ...formSchedule };
-                        updatedSchedule.openTime = value || '08:00';
-                        
-                        // Cập nhật formConfig
-                        setFormConfig({
-                          ...formConfig,
-                          formSchedule: updatedSchedule
-                        });
-                      }}
-                      value={formSchedule.openTime}
-                      use24Hours={true}
-                      label="Giờ mở"
-                    />
-                  </div>
-                  
-                  <div className="time-picker-wrapper">
-                    <CustomTimePicker
-                      onChange={(value: string) => {
-                        if (!formConfig) return;
-                        
-                        // Tạo một bản sao của formSchedule
-                        const updatedSchedule = { ...formSchedule };
-                        updatedSchedule.closeTime = value || '17:00';
-                        
-                        // Cập nhật formConfig
-                        setFormConfig({
-                          ...formConfig,
-                          formSchedule: updatedSchedule
-                        });
-                      }}
-                      value={formSchedule.closeTime}
-                      use24Hours={true}
-                      label="Giờ đóng"
-                    />
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label>Ngày mở form</label>
-                  <div className="weekday-selector">
-                    {weekdays.map(day => (
-                      <button
-                        key={day.value}
-                        type="button"
-                        className={`weekday-button ${formSchedule.openDays.includes(day.value) ? 'active' : ''}`}
-                        onClick={() => handleOpenDayChange(day.value)}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="closedMessage">Thông báo khi form đóng</label>
-                  <textarea
-                    id="closedMessage"
-                    name="closedMessage"
-                    value={formSchedule.closedMessage}
-                    onChange={handleFormScheduleChange}
-                    placeholder="Nhập thông báo hiển thị khi form đóng"
-                    rows={4}
-                  />
-                </div>
-              </div>
-            )}
+            <div className="alert alert-info">
+              <p><strong>Thông báo:</strong> Chức năng đặt lịch đóng/mở form đã bị xóa. Form sẽ luôn được mở trừ khi bạn đóng thủ công.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -883,101 +529,91 @@ export default function FormConfigPage() {
                 />
                 <span className="slider"></span>
               </label>
-              <label htmlFor="limitEnabled">Bật giới hạn đăng ký</label>
+              <label htmlFor="limitEnabled">Bật giới hạn số lượng đăng ký mỗi ngày</label>
             </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="maxRegistrationsPerDay">Số lượt đăng ký tối đa mỗi ngày</label>
-            <input
-              type="number"
-              id="maxRegistrationsPerDay"
-              name="maxRegistrationsPerDay"
-              value={formConfig.registrationLimit.maxRegistrationsPerDay}
-              onChange={handleLimitChange}
-              min="1"
-              disabled={!formConfig.registrationLimit.enabled}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="limitMessage">Thông báo khi đạt giới hạn</label>
-            <textarea
-              id="limitMessage"
-              name="message"
-              value={formConfig.registrationLimit.message}
-              onChange={(e) => handleLimitChange(e as any)}
-              placeholder="Nhập thông báo hiển thị khi đạt giới hạn đăng ký"
-              disabled={!formConfig.registrationLimit.enabled}
-              rows={3}
-            />
           </div>
           
-          {/* Phần giới hạn theo tầng */}
-          <div className="floor-limits-section">
-            <div className="form-group">
-              <div className="toggle-group">
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    id="byFloor"
-                    name="byFloor"
-                    checked={formConfig.registrationLimit.byFloor}
-                    onChange={handleLimitChange}
-                    disabled={!formConfig.registrationLimit.enabled}
-                  />
-                  <span className="slider"></span>
-                </label>
-                <label htmlFor="byFloor">Bật giới hạn đăng ký theo tầng</label>
+          {formConfig.registrationLimit.enabled && (
+            <div className="limit-config">
+              <div className="form-group">
+                <label htmlFor="maxRegistrationsPerDay">Số lượng đăng ký tối đa mỗi ngày</label>
+                <input
+                  type="number"
+                  id="maxRegistrationsPerDay"
+                  name="maxRegistrationsPerDay"
+                  value={formConfig.registrationLimit.maxRegistrationsPerDay}
+                  onChange={handleLimitChange}
+                  min="1"
+                />
               </div>
-            </div>
-            
-            {/* Chỉ hiển thị phần giới hạn theo tầng khi cả hai checkbox đều được tích */}
-          {formConfig.registrationLimit.enabled && formConfig.registrationLimit.byFloor && formConfig.registrationLimit.floorLimits && (
-            <div className="floor-limits-container">
-              <h4>Giới hạn theo từng tầng</h4>
               
-              {formConfig.registrationLimit.floorLimits.length > 0 ? (
-                formConfig.registrationLimit.floorLimits.map((floorLimit, index) => (
-                  <div key={index} className="floor-limit-item">
-                    <div className="floor-limit-header">
-                      <span>{floorLimit.floorName}</span>
-                      <div className="checkbox-group no-bg">
-                        <input
-                          type="checkbox"
-                          id={`floor-${index}-enabled`}
-                          checked={floorLimit.enabled}
-                          onChange={(e) => handleFloorLimitChange(index, 'enabled', e.target.checked)}
-                        />
-                        <label htmlFor={`floor-${index}-enabled`}>Bật giới hạn</label>
-                      </div>
+              <div className="form-group">
+                <label htmlFor="limitMessage">Thông báo khi đạt giới hạn</label>
+                <textarea
+                  id="limitMessage"
+                  name="message"
+                  value={formConfig.registrationLimit.message}
+                  onChange={handleLimitChange}
+                  placeholder="Nhập thông báo hiển thị khi đạt giới hạn đăng ký"
+                  rows={4}
+                />
+              </div>
+              
+              <div className="form-group">
+                <div className="toggle-group">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      id="byFloor"
+                      name="byFloor"
+                      checked={formConfig.registrationLimit.byFloor}
+                      onChange={handleLimitChange}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                  <label htmlFor="byFloor">Giới hạn theo từng tầng</label>
+                </div>
+              </div>
+              
+              {formConfig.registrationLimit.byFloor && formConfig.registrationLimit.floorLimits && (
+                <div className="floor-limits">
+                  <h4>Giới hạn đăng ký theo tầng</h4>
+                  
+                  <div className="floor-limits-table">
+                    <div className="floor-limits-header">
+                      <div className="floor-name">Tầng</div>
+                      <div className="floor-limit">Giới hạn</div>
+                      <div className="floor-enabled">Bật/Tắt</div>
                     </div>
                     
-                    <div className="floor-limit-body">
-                      <div className="form-group">
-                        <label htmlFor={`floor-${index}-max`}>Số lượt đăng ký tối đa</label>
-                        <input
-                          type="number"
-                          id={`floor-${index}-max`}
-                          value={floorLimit.maxRegistrations}
-                          onChange={(e) => handleFloorLimitChange(index, 'maxRegistrations', e.target.value)}
-                          min="1"
-                          disabled={!floorLimit.enabled}
-                        />
+                    {formConfig.registrationLimit.floorLimits.map((floorLimit, index) => (
+                      <div key={floorLimit.floorName} className="floor-limits-row">
+                        <div className="floor-name">{floorLimit.floorName}</div>
+                        <div className="floor-limit">
+                          <input
+                            type="number"
+                            value={floorLimit.maxRegistrations}
+                            onChange={(e) => handleFloorLimitChange(index, 'maxRegistrations', e.target.value)}
+                            min="1"
+                          />
+                        </div>
+                        <div className="floor-enabled">
+                          <label className="switch">
+                            <input
+                              type="checkbox"
+                              checked={floorLimit.enabled}
+                              onChange={(e) => handleFloorLimitChange(index, 'enabled', e.target.checked)}
+                            />
+                            <span className="slider"></span>
+                          </label>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))
-              ) : (
-                <div className="no-floors-message">
-                  <p>Chưa có tầng nào được cấu hình. Vui lòng thêm các tầng trong tab "Cấu hình trường" ở trường "Chọn tầng".</p>
                 </div>
               )}
             </div>
-          )}  
-          </div>
-          
-          {/* Phần xem trước thông báo đã được xóa theo yêu cầu */}
+          )}
         </div>
       </div>
     );
@@ -987,124 +623,445 @@ export default function FormConfigPage() {
   const renderFieldsTab = () => {
     if (!formConfig) return null;
 
-    // Sắp xếp các trường theo thứ tự hiển thị trong form
-    const fieldOrder = [
-      'name', 'phone', 'email', 'school', 'studentId', 
-      'purpose', 'floor', 'contact', 'date', 'time'
-    ];
+    // Danh sách các trường form
+    let fields = Object.keys(formConfig.fields).map(fieldName => ({
+      name: fieldName,
+      ...formConfig.fields[fieldName]
+    }));
     
-    // Lọc các trường theo thứ tự đã định nghĩa
-    const sortedFields = fieldOrder
-      .filter(fieldName => formConfig.fields[fieldName])
-      .map(fieldName => [fieldName, formConfig.fields[fieldName]] as [string, FieldConfig]);
+    // Di chuyển trường contact xuống dưới cùng
+    const contactIndex = fields.findIndex(field => field.name === 'contact');
+    if (contactIndex !== -1) {
+      const contactField = fields.splice(contactIndex, 1)[0];
+      fields.push(contactField);
+    }
+
+    // Xử lý lưu form builder fields
+    const handleSaveFormBuilderFields = (builderFields: FormBuilderField[]) => {
+      if (!formConfig) return;
+      
+      console.log('Form builder fields:', JSON.stringify(builderFields, null, 2));
+      
+      // Tạo một bản sao của formConfig để làm việc
+      const updatedFormConfig = { ...formConfig };
+      const updatedFields = { ...updatedFormConfig.fields };
+      
+      // Xóa các trường tùy chỉnh hiện tại
+      Object.keys(updatedFields).forEach(key => {
+        if (updatedFields[key].isCustom) {
+          console.log(`Xóa trường tùy chỉnh hiện tại: ${key}`);
+          delete updatedFields[key];
+        }
+      });
+      
+      console.log('Sau khi xóa các trường tùy chỉnh:', Object.keys(updatedFields));
+      
+      // Thêm các trường mới từ form builder
+      if (builderFields && builderFields.length > 0) {
+        builderFields.forEach(field => {
+          console.log(`Đang xử lý trường: ${field.label} (${field.fieldName})`);
+          
+          // Đảm bảo fieldName không trống và hợp lệ
+          let fieldName = field.fieldName;
+          if (!fieldName || fieldName.trim() === '') {
+            fieldName = createFieldName(field.label);
+            console.log(`Tạo fieldName mới: ${fieldName}`);
+          }
+          
+          // Đảm bảo fieldName là chuỗi hợp lệ cho key của object
+          const safeFieldName = fieldName.replace(/\s+/g, '_').toLowerCase();
+          
+          // Chuyển đổi options nếu cần
+          let options = undefined;
+          if (field.type === 'dropdown' && Array.isArray(field.options)) {
+            options = field.options.map(option => {
+              if (typeof option === 'string') {
+                return { value: option, label: option };
+              }
+              return option;
+            });
+          }
+          
+          // Thêm trường mới vào danh sách
+          updatedFields[safeFieldName] = {
+            label: field.label,
+            required: field.required,
+            enabled: field.enabled,
+            defaultValue: field.defaultValue || '',
+            fieldType: field.type,
+            placeholder: field.placeholder || '',
+            isCustom: true,
+            options: options
+          };
+          
+          // Thêm thuộc tính allowDateChange và dateFormat cho trường ngày
+          if (field.type === 'date') {
+            // Đảm bảo lưu đúng giá trị boolean vào database
+            updatedFields[safeFieldName].allowDateChange = field.allowDateChange === true;
+            // Lưu định dạng ngày
+            updatedFields[safeFieldName].dateFormat = field.dateFormat || 'dd/mm/yyyy';
+            console.log(`Lưu allowDateChange = ${field.allowDateChange === true}, dateFormat = ${field.dateFormat || 'dd/mm/yyyy'} cho trường ${safeFieldName}`);
+          }
+          
+          // Thêm thuộc tính allowTimeChange và timeFormat cho trường thời gian
+          if (field.type === 'time') {
+            // Đảm bảo lưu đúng giá trị boolean vào database
+            updatedFields[safeFieldName].allowTimeChange = field.allowTimeChange === true;
+            // Lưu định dạng thời gian
+            updatedFields[safeFieldName].timeFormat = field.timeFormat || '24h';
+            console.log(`Lưu allowTimeChange = ${field.allowTimeChange === true}, timeFormat = ${field.timeFormat || '24h'} cho trường ${safeFieldName}`);
+          }
+          
+          console.log(`Đã thêm trường mới: ${safeFieldName}`);
+        });
+      }
+      
+      console.log('Updated fields:', Object.keys(updatedFields));
+      console.log('Chi tiết fields:', JSON.stringify(updatedFields, null, 2));
+      
+      // Cập nhật formConfig với các trường mới
+      updatedFormConfig.fields = updatedFields;
+      
+      // Gửi dữ liệu trực tiếp đến server
+      console.log('Gửi dữ liệu trực tiếp đến server');
+      fetch('/api/form-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedFormConfig),
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Server response:', data);
+        if (data.success) {
+          // Cập nhật state với dữ liệu mới
+          setFormConfig(updatedFormConfig);
+          
+          // Làm mới giao diện
+          const currentTab = activeTab;
+          setActiveTab('general');
+          setTimeout(() => {
+            setActiveTab(currentTab);
+          }, 50);
+          
+          // Đã vô hiệu hóa toast thông báo khi tạo trường mới theo yêu cầu của người dùng
+          // toast.success('Đã lưu các trường tùy chỉnh vào cơ sở dữ liệu', {
+          //   position: "top-right",
+          //   autoClose: 3000,
+          //   hideProgressBar: false,
+          //   closeOnClick: true,
+          //   pauseOnHover: true,
+          //   draggable: true,
+          // });
+        } else {
+          toast.error('Lỗi khi lưu trường mới: ' + (data.message || 'Lỗi không xác định'), {
+            position: "top-right",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Lỗi khi lưu trường mới:', error);
+        toast.error('Lỗi khi lưu trường mới: ' + error.message, {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      });
+    };
+    
+    // Hàm tạo fieldName từ label
+    const createFieldName = (label: string): string => {
+      return label
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+    };
+    
+    // Hàm xử lý xóa trường
+    const handleDeleteField = (fieldName: string) => {
+      if (!formConfig) return;
+      
+      // Xác nhận trước khi xóa
+      if (window.confirm(`Bạn có chắc chắn muốn xóa trường này không?`)) {
+        // Tạo bản sao của fields hiện tại
+        const updatedFields = { ...formConfig.fields };
+        
+        // Xóa trường
+        delete updatedFields[fieldName];
+        
+        // Cập nhật formConfig
+        setFormConfig({
+          ...formConfig,
+          fields: updatedFields
+        });
+        
+        // Lưu cấu hình form vào database
+        setTimeout(() => {
+          saveFormConfig();
+        }, 100);
+        
+        // Hiển thị thông báo
+        toast.success('Đã xóa trường thành công', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    };
 
     return (
-      <div className="tab-content fields-tab">
-        {sortedFields.map(([fieldName, field]) => (
-          <div key={fieldName} className="field-config">
-            <div className="field-header">
-              <h3>{getFieldDisplayName(fieldName)}</h3>
-            </div>
-            
-            <div className="field-body">
-              <div className="form-group">
-                <label htmlFor={`${fieldName}-label`}>Nhãn hiển thị</label>
-                <input
-                  type="text"
-                  id={`${fieldName}-label`}
-                  value={field.label}
-                  onChange={(e) => handleFieldChange(fieldName, 'label', e.target.value)}
-                  placeholder="Nhập nhãn hiển thị"
-                />
-              </div>
-              
-              <div className="form-row">
-                <div className="checkbox-group">
-                  <input
-                    type="checkbox"
-                    id={`${fieldName}-required`}
-                    checked={field.required}
-                    onChange={(e) => handleFieldChange(fieldName, 'required', e.target.checked)}
-                  />
-                  <label htmlFor={`${fieldName}-required`}>Bắt buộc</label>
-                </div>
+      <div className="tab-content">
+        <div className="fields-section">
+          <h3>Cấu hình các trường form</h3>
+          
+          {/* Form Builder */}
+          <div className="form-builder-section">
+            {/* Truyền các trường tùy chỉnh hiện tại vào FormBuilder */}
+            <FormBuilder 
+              onSave={handleSaveFormBuilderFields} 
+              initialFields={fields.filter(field => field.isCustom).map(field => {
+                // Chuyển đổi options để đảm bảo kiểu dữ liệu phù hợp
+                let convertedOptions: FieldOption[] | undefined = undefined;
+                if (field.fieldType === 'dropdown' && Array.isArray(field.options)) {
+                  convertedOptions = field.options.map(opt => {
+                    if (typeof opt === 'string') {
+                      return { value: opt, label: opt };
+                    }
+                    return opt as FieldOption;
+                  });
+                }
                 
-                <div className="checkbox-group">
-                  <input
-                    type="checkbox"
-                    id={`${fieldName}-enabled`}
-                    checked={field.enabled}
-                    onChange={(e) => handleFieldChange(fieldName, 'enabled', e.target.checked)}
-                  />
-                  <label htmlFor={`${fieldName}-enabled`}>Hiển thị</label>
-                </div>
+                // Tạo đối tượng field cơ bản
+                const formBuilderField: FormBuilderField = {
+                  id: field.name, // Sử dụng name làm id
+                  fieldName: field.name,
+                  type: field.fieldType as FieldType,
+                  label: field.label,
+                  placeholder: field.placeholder || '',
+                  required: field.required,
+                  enabled: field.enabled,
+                  defaultValue: field.defaultValue,
+                  isCustom: true,
+                  options: convertedOptions
+                };
+                
+                // Thêm thuộc tính allowDateChange và dateFormat cho trường ngày
+                if (field.fieldType === 'date') {
+                  formBuilderField.allowDateChange = field.allowDateChange;
+                  formBuilderField.dateFormat = field.dateFormat || 'dd/mm/yyyy';
+                  console.log(`Truyền allowDateChange = ${field.allowDateChange}, dateFormat = ${field.dateFormat || 'dd/mm/yyyy'} cho trường ${field.name}`);
+                }
+                
+                // Thêm thuộc tính allowTimeChange và timeFormat cho trường thời gian
+                if (field.fieldType === 'time') {
+                  formBuilderField.allowTimeChange = field.allowTimeChange;
+                  formBuilderField.timeFormat = field.timeFormat || '24h';
+                  console.log(`Truyền allowTimeChange = ${field.allowTimeChange}, timeFormat = ${field.timeFormat || '24h'} cho trường ${field.name}`);
+                }
+                
+                return formBuilderField;
+              })}
+            />
+          </div>
+          
+          <h4 className="form-preview-title">Xem trước form</h4>
+          
+          <div className="form-preview">
+            <div className="preview-container">
+              <h3 className="form-title">{formConfig?.title || 'Form đăng ký'}</h3>
+              
+              {fields.map(field => {
+                if (!field.enabled) return null;
+                
+                return (
+                  <div key={field.name} className="preview-field">
+                    {field.fieldType === 'text' && (
+                      <input 
+                        type="text" 
+                        placeholder={field.label}
+                        className="preview-input"
+                        readOnly
+                      />
+                    )}
+                    
+                    {field.fieldType === 'textarea' && (
+                      <textarea 
+                        placeholder={field.label}
+                        className="preview-textarea"
+                        readOnly
+                      ></textarea>
+                    )}
+                    
+                    {field.fieldType === 'dropdown' && (
+                      <div className="dropdown-container">
+                        <select className="preview-select" disabled>
+                          <option value="">{field.label}</option>
+                          {Array.isArray(field.options) && field.options.map((option, index) => (
+                            <option key={index} value={typeof option === 'string' ? option : option.value}>
+                              {typeof option === 'string' ? option : option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="dropdown-arrow">▼</div>
+                      </div>
+                    )}
+                    
+                    {field.fieldType === 'date' && (
+                      <input 
+                        type="text" 
+                        placeholder={`${field.label} (dd/mm/yyyy)`}
+                        className={`preview-input preview-date ${!field.allowDateChange ? 'disabled-input' : ''}`}
+                        defaultValue={field.defaultValue || ''}
+                        readOnly={!field.allowDateChange}
+                        disabled={!field.allowDateChange}
+                      />
+                    )}
+                    
+                    {field.fieldType === 'time' && (
+                      <input 
+                        type="text" 
+                        placeholder={`${field.label} (HH:MM)`}
+                        className="preview-input preview-time"
+                        readOnly
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              
+              <div className="required-note">
+                * là thông tin bắt buộc phải điền
               </div>
               
-              {/* Hiển thị tùy chọn nếu trường có options */}
-              {field.options && (
-                <div className="options-container">
-                  <label>Tùy chọn</label>
-                  {field.options.map((option, index) => (
-                    <div key={index} className="option-row">
-                      <input
-                        type="text"
-                        value={option}
-                        onChange={(e) => updateOption(fieldName, index, e.target.value)}
-                        placeholder={`Tùy chọn ${index + 1}`}
-                      />
-                      <button 
-                        type="button" 
-                        className="btn-icon remove"
-                        onClick={() => removeOption(fieldName, index)}
-                        title="Xóa tùy chọn"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <button 
-                    type="button" 
-                    className="btn-add-option"
-                    onClick={() => addOption(fieldName)}
-                  >
-                    + Thêm tùy chọn
-                  </button>
-                </div>
-              )}
-              
-              {/* Hiển thị giá trị mặc định nếu trường có defaultValue */}
-              {fieldName === 'time' && (
-                <div className="form-group">
-                  <label htmlFor={`${fieldName}-default`}>Giá trị mặc định</label>
-                  <input
-                    type="text"
-                    id={`${fieldName}-default`}
-                    value={field.defaultValue || ''}
-                    onChange={(e) => handleFieldChange(fieldName, 'defaultValue', e.target.value)}
-                    placeholder="Nhập giá trị mặc định (ví dụ: 09:00)"
-                  />
-                </div>
-              )}
+              <div className="preview-actions">
+                <button className="preview-submit-button" disabled>Gửi đăng ký</button>
+              </div>
             </div>
           </div>
-        ))}
+          
+          <style jsx>{`
+            .form-preview-title {
+              margin-top: 30px;
+              margin-bottom: 15px;
+              font-size: 18px;
+              font-weight: 600;
+            }
+            
+            .form-preview {
+              background-color: #f5f5f5;
+              border: 1px solid #e0e0e0;
+              padding: 20px;
+              margin-bottom: 30px;
+            }
+            
+            .preview-container {
+              max-width: 600px;
+              margin: 0 auto;
+              background-color: white;
+              padding: 30px;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            
+            .form-title {
+              text-align: center;
+              margin-bottom: 25px;
+              color: #333;
+              font-size: 24px;
+              font-weight: 600;
+            }
+            
+            .preview-field {
+              margin-bottom: 15px;
+            }
+            
+            .preview-input, .preview-textarea, .preview-select {
+              width: 100%;
+              padding: 10px 12px;
+              border: 1px solid #ccc;
+              border-radius: 4px;
+              background-color: #fff;
+              font-size: 16px;
+            }
+            
+            .disabled-input {
+              background-color: #f5f5f5;
+              color: #666;
+              cursor: not-allowed;
+              border: 1px solid #ddd;
+            }
+            
+            .preview-textarea {
+              min-height: 100px;
+              resize: vertical;
+            }
+            
+            .dropdown-container {
+              position: relative;
+            }
+            
+            .dropdown-arrow {
+              position: absolute;
+              right: 12px;
+              top: 50%;
+              transform: translateY(-50%);
+              font-size: 12px;
+              color: #666;
+              pointer-events: none;
+            }
+            
+            .required-note {
+              font-size: 14px;
+              color: #666;
+              margin: 20px 0;
+              font-style: italic;
+            }
+            
+            .preview-actions {
+              margin-top: 20px;
+              text-align: center;
+            }
+            
+            .preview-submit-button {
+              background-color: #1a2e3b;
+              color: white;
+              border: none;
+              padding: 12px 24px;
+              border-radius: 4px;
+              font-size: 16px;
+              width: 100%;
+              cursor: not-allowed;
+            }
+          `}</style>
+        </div>
       </div>
     );
   };
-  
+
   // Hàm để hiển thị tên trường dễ đọc hơn
   const getFieldDisplayName = (fieldName: string) => {
-    const displayNames: {[key: string]: string} = {
-      'name': 'Họ và tên',
-      'phone': 'Số điện thoại',
-      'email': 'Email',
-      'school': 'Trường đại học',
-      'studentId': 'Mã số sinh viên',
-      'purpose': 'Mục đích',
-      'floor': 'Tầng',
-      'contact': 'Người liên hệ',
-      'date': 'Ngày đăng ký',
-      'time': 'Giờ đăng ký'
+    const displayNames: { [key: string]: string } = {
+      name: 'Họ và tên',
+      email: 'Email',
+      phone: 'Số điện thoại',
+      floor: 'Tầng',
+      department: 'Phòng ban',
+      purpose: 'Mục đích đến',
+      note: 'Ghi chú'
     };
     
     return displayNames[fieldName] || fieldName;
@@ -1120,7 +1077,52 @@ export default function FormConfigPage() {
 
   return (
     <div className="container">
-      {/* Modal component cho thông báo */}
+      <div className="form-config-page">
+        <h1>Cấu hình form đăng ký</h1>
+        
+        {renderMessage()}
+        
+        <div className="tabs">
+          <div className="tab-buttons">
+            <button
+              className={`tab-button ${activeTab === 'general' ? 'active' : ''}`}
+              onClick={() => handleTabChange('general')}
+            >
+              Cấu hình chung
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'fields' ? 'active' : ''}`}
+              onClick={() => handleTabChange('fields')}
+            >
+              Cấu hình trường
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'limits' ? 'active' : ''}`}
+              onClick={() => handleTabChange('limits')}
+            >
+              Giới hạn đăng ký
+            </button>
+          </div>
+          
+          {activeTab === 'general' && renderGeneralTab()}
+          {activeTab === 'fields' && renderFieldsTab()}
+          {activeTab === 'limits' && renderLimitsTab()}
+          
+          <div className="form-actions">
+            {activeTab !== 'fields' && (
+              <button
+                type="button"
+                className="save-button"
+                onClick={saveFormConfig}
+                disabled={saving}
+              >
+                {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -1128,89 +1130,6 @@ export default function FormConfigPage() {
         message={modalContent.message}
         type={modalContent.type}
       />
-      <div className="form-config-container">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h1>Cấu hình form đăng ký</h1>
-          {formConfig && (
-            <div className="switch-container">
-              <div className="switch-label">Trạng thái form:</div>
-              <label className="switch">
-                <input 
-                  type="checkbox" 
-                  checked={!formConfig.isFormClosed}
-                  onChange={handleToggleFormClosed}
-                />
-                <span className="slider">
-                  <span className="slider-text text-on">MỞ</span>
-                  <span className="slider-text text-off">ĐÓNG</span>
-                </span>
-              </label>
-              <span className={`status-text ${formConfig.isFormClosed ? 'status-closed' : 'status-open'}`}>
-                {formConfig.isFormClosed ? 'Đóng' : 'Mở'}
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {renderMessage()}
-        
-        <div className="tabs">
-          <div 
-            className={`tab ${activeTab === 'general' ? 'active' : ''}`}
-            onClick={() => handleTabChange('general')}
-          >
-            Cấu hình chung
-          </div>
-          <div 
-            className={`tab ${activeTab === 'fields' ? 'active' : ''}`}
-            onClick={() => handleTabChange('fields')}
-          >
-            Cấu hình trường
-          </div>
-          <div 
-            className={`tab ${activeTab === 'limits' ? 'active' : ''}`}
-            onClick={() => handleTabChange('limits')}
-          >
-            Giới hạn đăng ký
-          </div>
-        </div>
-      
-        <div className="tab-container">
-          {activeTab === 'general' && renderGeneralTab()}
-          {activeTab === 'fields' && renderFieldsTab()}
-          {activeTab === 'limits' && renderLimitsTab()}
-        </div>
-      
-        <div className="save-button-container">
-          {message && message.type === 'success' && (
-            <span className="success-message">
-              {message.text}
-            </span>
-          )}
-          <button 
-            className="btn" 
-            onClick={saveFormConfig}
-            disabled={saving}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FF9900'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1e2e3e'}
-            style={{
-              backgroundColor: '#1e2e3e',
-              color: 'white',
-              border: 'none',
-              fontWeight: 600,
-              letterSpacing: '0.5px',
-              padding: '12px 30px',
-              height: '48px',
-              fontSize: '1rem',
-              borderRadius: '4px',
-              transition: 'all 0.3s ease',
-              minWidth: '160px'
-            }}
-          >
-            {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

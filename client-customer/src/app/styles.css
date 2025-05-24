@@ -19,6 +19,30 @@
   background-color: white;
 }
 
+/* Styles cho DatePicker */
+.datepicker-container {
+  width: 100%;
+}
+
+.datepicker-container .react-datepicker-wrapper {
+  width: 100%;
+  display: block;
+}
+
+.datepicker-container .react-datepicker__input-container {
+  width: 100%;
+  display: block;
+}
+
+.datepicker-container input {
+  width: 100%;
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background-color: white;
+}
+
 .form-input:focus {
   border-color: #1e2e3e;
   border-width: 1px;
@@ -74,6 +98,19 @@
   border-color: #1e2e3e;
   border-width: 1px;
   transition: all 0.2s ease;
+}
+
+/* Style cho trường ngày bị vô hiệu hóa */
+.disabled-date {
+  background-color: #f5f5f5;
+  color: #666;
+  cursor: not-allowed;
+  border-color: #ddd;
+}
+
+.disabled-date:hover, .disabled-date:focus {
+  border-color: #ddd;
+  box-shadow: none;
 }
 
 .select-input {

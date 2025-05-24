@@ -1,25 +1,31 @@
 {
-  "title": "ĐĂNG KÝ LÊN VĂN PHÒNG",
+  "title": "Đăng ký lên văn phòng",
+  "isFormClosed": false,
   "registrationLimit": {
     "enabled": true,
-    "maxRegistrationsPerDay": 20,
+    "maxRegistrationsPerDay": 10,
     "message": "Rất tiếc, số lượt đăng ký trong ngày hôm nay đã đạt giới hạn. Vui lòng thử lại vào ngày mai.",
-    "byFloor": true,
+    "byFloor": false,
     "floorLimits": [
       {
-        "floorName": "Tầng 26",
-        "maxRegistrations": 20,
-        "enabled": true
-      },
-      {
-        "floorName": "Tầng 46",
-        "maxRegistrations": 1,
-        "enabled": true
-      },
-      {
-        "floorName": "Tầng 36",
+        "floorName": "Tầng 2",
         "maxRegistrations": 3,
-        "enabled": false
+        "enabled": true
+      },
+      {
+        "floorName": "Tầng 3",
+        "maxRegistrations": 3,
+        "enabled": true
+      },
+      {
+        "floorName": "Tầng 4",
+        "maxRegistrations": 4,
+        "enabled": true
+      },
+      {
+        "floorName": "Tầng 5",
+        "maxRegistrations": 4,
+        "enabled": true
       }
     ]
   },
@@ -42,14 +48,11 @@
     "school": {
       "label": "Trường đại học",
       "required": true,
-      "enabled": true,
-      "options": [
-        "Đại học Sư phạm Kỹ thuật TP.HCM"
-      ]
+      "enabled": true
     },
     "studentId": {
       "label": "Mã số sinh viên",
-      "required": false,
+      "required": true,
       "enabled": true
     },
     "purpose": {
@@ -64,19 +67,13 @@
       "label": "Chọn tầng",
       "required": true,
       "enabled": true,
-      "options": [
-        "Tầng 26",
-        "Tầng 46",
-        "Tầng 36"
-      ]
+      "options": []
     },
     "contact": {
       "label": "Chọn người liên hệ",
       "required": true,
       "enabled": true,
-      "options": [
-        "Lữ Thiện"
-      ]
+      "options": []
     },
     "date": {
       "label": "Ngày đăng ký",
@@ -86,23 +83,7 @@
     "time": {
       "label": "Giờ đăng ký",
       "required": true,
-      "enabled": true,
-      "defaultValue": "09:00"
+      "enabled": true
     }
-  },
-  "formSchedule": {
-    "enabled": false,
-    "openTime": "22:43",
-    "closeTime": "22:44",
-    "openDays": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5
-    ],
-    "closedMessage": "Form đăng ký hiện đã đóng. Vui lòng quay lại sau."
-  },
-  "isFormClosed": false
+  }
 }

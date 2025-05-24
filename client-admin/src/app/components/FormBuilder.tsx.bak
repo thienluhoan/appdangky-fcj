@@ -1,0 +1,539 @@
+"use client";
+
+import React, { useState } from 'react';
+import '../form/form-builder.css';
+
+// Định nghĩa các loại trường
+export type FieldType = 'text' | 'textarea' | 'dropdown' | 'date' | 'time' | 'email' | 'number';
+
+// Cấu trúc của một tùy chọn cho dropdown
+export interface FieldOption {
+  value: string;
+  label: string;
+}
+
+// Cấu trúc của một trường form
+export interface FormBuilderField {
+  id: string;
+  fieldName: string; // Tên trường dùng trong database
+  type: FieldType;
+  label: string;
+  placeholder?: string;
+  required: boolean;
+  enabled: boolean;
+  defaultValue?: string;
+  isCustom: boolean; // Đánh dấu trường tùy chỉnh
+  options?: FieldOption[]; // Chỉ dùng cho dropdown
+  allowDateChange?: boolean; // Chỉ dùng cho trường ngày
+  dateFormat?: string; // Định dạng hiển thị ngày (dd/mm/yyyy, mm/dd/yyyy, yyyy-mm-dd)
+}
+
+interface FormBuilderProps {
+  onSave: (fields: FormBuilderField[]) => void;
+  initialFields?: FormBuilderField[];
+}
+
+export default function FormBuilder({ onSave, initialFields = [] }: FormBuilderProps) {
+  const [fields, setFields] = useState<FormBuilderField[]>(initialFields);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editingIndex, setEditingIndex] = useState<number>(-1);
+  const [fieldLabel, setFieldLabel] = useState<string>('');
+  const [fieldPlaceholder, setFieldPlaceholder] = useState<string>('');
+  const [fieldDefaultValue, setFieldDefaultValue] = useState<string>('');
+  const [fieldRequired, setFieldRequired] = useState<boolean>(false);
+  const [fieldEnabled, setFieldEnabled] = useState<boolean>(true);
+  const [fieldType, setFieldType] = useState<FieldType>('text');
+  const [fieldOptions, setFieldOptions] = useState<FieldOption[]>([]);
+  const [allowDateChange, setAllowDateChange] = useState<boolean>(false);
+  const [dateFormat, setDateFormat] = useState<string>('dd/mm/yyyy');
+
+  // Tạo ID ngẫu nhiên cho trường mới
+  const generateId = () => {
+    return Math.random().toString(36).substring(2, 9);
+  };
+
+  // Tạo tên trường từ label
+  const createFieldName = (label: string): string => {
+    // Chuyển đổi label thành fieldName: loại bỏ dấu, thay khoảng trắng bằng gạch dưới, và chuyển thành chữ thường
+    return label
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+  };
+
+  // Thêm trường mới vào form
+  const addField = (type: FieldType) => {
+    setFieldType(type);
+    setFieldLabel('');
+    
+    // Đặt placeholder phù hợp với từng loại trường
+    let placeholder = 'Nhập nội dung...';
+    if (type === 'date') {
+      placeholder = 'Nhập ngày (dd/mm/yyyy)';
+    } else if (type === 'time') {
+      placeholder = 'Nhập giờ (HH:MM)';
+    }
+    setFieldPlaceholder(placeholder);
+    
+    // Đặt giá trị mặc định phù hợp với từng loại trường
+    let defaultValue = '';
+    if (type === 'date') {
+      // Để trống giá trị mặc định cho trường ngày
+      defaultValue = '';
+    } else if (type === 'time') {
+      defaultValue = '';
+    }
+    setFieldDefaultValue(defaultValue);
+    
+    // Đặt các giá trị khác
+    setFieldRequired(false);
+    setFieldEnabled(true);
+    setAllowDateChange(false); // Mặc định không cho phép thay đổi ngày
+    
+    setFieldOptions(type === 'dropdown' ? [
+      { value: 'option1', label: 'Tùy chọn 1' },
+      { value: 'option2', label: 'Tùy chọn 2' },
+      { value: 'option3', label: 'Tùy chọn 3' }
+    ] : []);
+    
+    setIsEditing(true);
+    setEditingIndex(-1);
+  };
+
+  // Lưu trường hiện tại vào danh sách
+  const saveField = () => {
+    if (!fieldLabel) return;
+    
+    // Tạo fieldName từ label và đảm bảo nó là duy nhất
+    let fieldName = createFieldName(fieldLabel);
+    
+    // Kiểm tra xem fieldName đã tồn tại chưa
+    const existingFieldNames = fields.map(f => f.fieldName);
+    if (existingFieldNames.includes(fieldName) && (editingIndex === -1 || fields[editingIndex].fieldName !== fieldName)) {
+      // Nếu fieldName đã tồn tại, thêm số vào cuối
+      let counter = 1;
+      while (existingFieldNames.includes(`${fieldName}_${counter}`)) {
+        counter++;
+      }
+      fieldName = `${fieldName}_${counter}`;
+    }
+    
+    console.log('Saving field with fieldName:', fieldName);
+    
+    // Tạo trường mới với các thuộc tính cơ bản
+    const newField: FormBuilderField = {
+      id: generateId(),
+      fieldName,
+      type: fieldType,
+      label: fieldLabel,
+      placeholder: fieldPlaceholder,
+      required: fieldRequired,
+      enabled: fieldEnabled,
+      defaultValue: fieldDefaultValue,
+      isCustom: true,
+      options: fieldType === 'dropdown' ? fieldOptions : undefined
+    };
+    
+    // Thêm thuộc tính cho trường ngày
+    if (fieldType === 'date') {
+      // Lưu giá trị boolean rõ ràng vào trường
+      newField.allowDateChange = allowDateChange === true;
+      // Lưu định dạng ngày
+      newField.dateFormat = dateFormat;
+      console.log(`Đặt allowDateChange = ${allowDateChange === true}, dateFormat = ${dateFormat} cho trường ngày ${fieldName}`);
+    }
+
+    console.log('New field data:', newField);
+
+    if (isEditing && editingIndex >= 0) {
+      // Cập nhật trường đã tồn tại
+      const updatedFields = [...fields];
+      updatedFields[editingIndex] = newField;
+      setFields(updatedFields);
+    } else {
+      // Thêm trường mới
+      setFields([...fields, newField]);
+    }
+
+    // Gọi onSave để cập nhật ngay lập tức
+    setTimeout(() => {
+      const updatedFields = isEditing && editingIndex >= 0 ? 
+        [...fields.slice(0, editingIndex), newField, ...fields.slice(editingIndex + 1)] : 
+        [...fields, newField];
+      console.log('Calling onSave with fields:', updatedFields);
+      onSave(updatedFields);
+    }, 0);
+
+    // Reset trạng thái
+    setIsEditing(false);
+    setEditingIndex(-1);
+  };
+
+  // Hủy thao tác chỉnh sửa
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditingIndex(-1);
+  };
+
+  // Chỉnh sửa trường đã tồn tại
+  const editField = (index: number) => {
+    const field = fields[index];
+    setFieldLabel(field.label);
+    setFieldPlaceholder(field.placeholder || ''); // Sử dụng chuỗi rỗng nếu placeholder là undefined
+    setFieldDefaultValue(field.defaultValue || '');
+    setFieldRequired(field.required);
+    setFieldEnabled(field.enabled);
+    setFieldType(field.type);
+    setFieldOptions(field.options || []);
+    
+    // Đọc thuộc tính cho trường ngày
+    if (field.type === 'date') {
+      // Lấy giá trị trực tiếp từ database
+      console.log(`allowDateChange trong database: ${JSON.stringify(field.allowDateChange)}`);
+      console.log(`dateFormat trong database: ${JSON.stringify(field.dateFormat)}`);
+      
+      // Sử dụng giá trị boolean rõ ràng cho allowDateChange
+      const dateChangeAllowed = field.allowDateChange === true;
+      setAllowDateChange(dateChangeAllowed);
+      
+      // Đọc định dạng ngày nếu có
+      // Sử dụng giá trị mặc định nếu dateFormat là undefined
+      setDateFormat(field.dateFormat || 'dd/mm/yyyy');
+      
+      console.log(`Đã đặt allowDateChange = ${dateChangeAllowed}, dateFormat = ${field.dateFormat || 'dd/mm/yyyy'}`);
+    } else {
+      setAllowDateChange(false); // Mặc định cho các trường khác là false
+      setDateFormat('dd/mm/yyyy'); // Mặc định là dd/mm/yyyy
+    }
+    
+    setIsEditing(true);
+    setEditingIndex(index);
+  };
+
+  // Xóa trường
+  const deleteField = (index: number) => {
+    const updatedFields = [...fields];
+    updatedFields.splice(index, 1);
+    setFields(updatedFields);
+    
+    // Gọi onSave để cập nhật ngay lập tức
+    setTimeout(() => {
+      console.log('Calling onSave after deleting field at index:', index);
+      onSave(updatedFields);
+    }, 0);
+  };
+
+  // Di chuyển trường lên/xuống
+  const moveField = (index: number, direction: 'up' | 'down') => {
+    if (
+      (direction === 'up' && index === 0) || 
+      (direction === 'down' && index === fields.length - 1)
+    ) {
+      return;
+    }
+
+    const updatedFields = [...fields];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    // Hoán đổi vị trí
+    [updatedFields[index], updatedFields[newIndex]] = [updatedFields[newIndex], updatedFields[index]];
+    
+    setFields(updatedFields);
+  };
+
+  // Thêm tùy chọn mới cho dropdown
+  const addOption = () => {
+    const newOption: FieldOption = {
+      value: `option${fieldOptions.length + 1}`,
+      label: `Tùy chọn ${fieldOptions.length + 1}`
+    };
+    setFieldOptions([...fieldOptions, newOption]);
+  };
+
+  // Cập nhật tùy chọn
+  const updateOption = (index: number, key: keyof FieldOption, value: string) => {
+    const updatedOptions = [...fieldOptions];
+    updatedOptions[index] = {
+      ...updatedOptions[index],
+      [key]: value
+    };
+    setFieldOptions(updatedOptions);
+  };
+
+  // Xóa tùy chọn
+  const removeOption = (index: number) => {
+    const updatedOptions = [...fieldOptions];
+    updatedOptions.splice(index, 1);
+    setFieldOptions(updatedOptions);
+  };
+
+  // Lấy tên hiển thị cho loại trường
+  const getFieldTypeName = (type: FieldType): string => {
+    switch (type) {
+      case 'text':
+        return 'Text Field';
+      case 'textarea':
+        return 'Text Area';
+      case 'dropdown':
+        return 'Dropdown';
+      case 'date':
+        return 'Date Field';
+      case 'time':
+        return 'Time Field';
+      case 'email':
+        return 'Email Field';
+      case 'number':
+        return 'Number Field';
+      default:
+        return 'Unknown Field';
+    }
+  };
+
+  // Render danh sách các trường
+  const renderFieldsList = () => {
+    return (
+      <div className="fields-list">
+        <h3>Các trường trong form</h3>
+        
+        {fields.length === 0 ? (
+          <div className="empty-fields">
+            <p>Chưa có trường nào. Hãy thêm trường mới bằng các nút bên trên.</p>
+          </div>
+        ) : (
+          <div className="fields-container">
+            {fields.map((field, index) => (
+              <div key={field.id} className="field-item">
+                <div className="field-info">
+                  <div className="field-type">{getFieldTypeName(field.type)}</div>
+                  <div className="field-label">{field.label}</div>
+                  {field.required && <div className="field-required">*</div>}
+                </div>
+                <div className="field-actions">
+                  <button 
+                    type="button" 
+                    className="action-button" 
+                    onClick={() => moveField(index, 'up')} 
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </button>
+                  <button 
+                    type="button" 
+                    className="action-button" 
+                    onClick={() => moveField(index, 'down')} 
+                    disabled={index === fields.length - 1}
+                  >
+                    ↓
+                  </button>
+                  <button 
+                    type="button" 
+                    className="action-button edit" 
+                    onClick={() => editField(index)}
+                  >
+                    ✎
+                  </button>
+                  <button 
+                    type="button" 
+                    className="action-button delete" 
+                    onClick={() => deleteField(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render trình chỉnh sửa trường
+  const renderFieldEditor = () => {
+    if (!isEditing) return null;
+
+    return (
+      <div className="field-editor">
+        <h3>{editingIndex >= 0 ? 'Chỉnh sửa trường' : 'Thêm trường mới'}</h3>
+        
+        <div className="form-group">
+          <label>Nhãn trường</label>
+          <input 
+            type="text" 
+            value={fieldLabel} 
+            onChange={(e) => setFieldLabel(e.target.value)}
+          />
+        </div>
+        
+        <div className="form-group">
+          <label>Placeholder</label>
+          <input 
+            type="text" 
+            value={fieldPlaceholder} 
+            onChange={(e) => setFieldPlaceholder(e.target.value)}
+          />
+        </div>
+
+        {/* Giá trị mặc định cho các trường khác ngoài trường ngày */}
+        {fieldType !== 'date' && (
+          <div className="form-group">
+            <label>Giá trị mặc định</label>
+            <input 
+              type="text" 
+              value={fieldDefaultValue} 
+              onChange={(e) => setFieldDefaultValue(e.target.value)}
+            />
+          </div>
+        )}
+        
+        {/* Ngày mặc định cho trường ngày */}
+        {fieldType === 'date' && (
+          <div className="form-group">
+            <label>Ngày mặc định ({dateFormat})</label>
+            checked={fieldEnabled}
+            onChange={(e) => setFieldEnabled(e.target.checked)}
+          />
+          <label htmlFor="field-enabled">Kích hoạt</label>
+        </div>
+        
+        {/* Tùy chọn cho trường ngày */}
+        {fieldType === 'date' && (
+          <>
+            <div className="form-group checkbox-group">
+              <input
+                type="checkbox"
+                id="allow-date-change"
+                checked={allowDateChange}
+                onChange={(e) => setAllowDateChange(e.target.checked)}
+              />
+              <label htmlFor="allow-date-change">Cho phép thay đổi ngày</label>
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="date-format">Định dạng ngày</label>
+              <select
+                id="date-format"
+                value={dateFormat}
+                onChange={(e) => setDateFormat(e.target.value)}
+                className="form-control"
+              >
+                <option value="dd/mm/yyyy">dd/mm/yyyy</option>
+                <option value="mm/dd/yyyy">mm/dd/yyyy</option>
+                <option value="yyyy-mm-dd">yyyy-mm-dd</option>
+              </select>
+              <div className="form-note">
+                Định dạng hiển thị ngày trên trang client
+              </div>
+            </div>
+          </>
+        )}
+        
+        {fieldType === 'dropdown' && (
+          <div className="options-config">
+            <h4>Danh sách tùy chọn</h4>
+            
+            <div className="options-list">
+              {fieldOptions.map((option, index) => (
+                <div key={index} className="option-item">
+                  <input
+                    type="text"
+                    value={option.label}
+                    onChange={(e) => updateOption(index, 'label', e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="remove-option-button"
+                    onClick={() => removeOption(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            <button
+              type="button"
+              className="add-option-button"
+              onClick={addOption}
+            >
+              + Thêm tùy chọn
+            </button>
+          </div>
+        )}
+        
+        <div className="editor-actions">
+          <button 
+            type="button" 
+            className="save-button" 
+            onClick={saveField}
+          >
+            {editingIndex >= 0 ? 'Cập nhật' : 'Thêm vào form'}
+          </button>
+          <button 
+            type="button" 
+            className="cancel-button" 
+            onClick={cancelEdit}
+          >
+            Hủy
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="form-builder-container">
+      <div className="builder-content">
+        {!isEditing && (
+          <div className="field-types">
+            <h3>Thêm trường mới</h3>
+            <div className="field-type-buttons">
+              <button 
+                type="button" 
+                className="field-type-button" 
+                onClick={() => addField('text')}
+              >
+                Text Field
+              </button>
+              <button 
+                type="button" 
+                className="field-type-button" 
+                onClick={() => addField('textarea')}
+              >
+                Text Area
+              </button>
+              <button 
+                type="button" 
+                className="field-type-button" 
+                onClick={() => addField('dropdown')}
+              >
+                Dropdown
+              </button>
+              <button 
+                type="button" 
+                className="field-type-button" 
+                onClick={() => addField('date')}
+              >
+                Date Field
+              </button>
+              <button 
+                type="button" 
+                className="field-type-button" 
+                onClick={() => addField('time')}
+              >
+                Time Field
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {renderFieldEditor()}
+        
+        {!isEditing && renderFieldsList()}
+      </div>
+    </div>
+  );
+}

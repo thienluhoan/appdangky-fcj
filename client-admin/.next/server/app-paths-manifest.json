@@ -1,4 +1,6 @@
 {
+  "/api/form-config/route": "app/api/form-config/route.js",
   "/form/page": "app/form/page.js",
-  "/api/form-status/notify/route": "app/api/form-status/notify/route.js"
+  "/page": "app/page.js",
+  "/list/page": "app/list/page.js"
 }

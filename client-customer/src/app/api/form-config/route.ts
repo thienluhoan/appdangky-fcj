@@ -1,96 +1,70 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 
-// Đường dẫn đến file cấu hình form từ ứng dụng admin
-const adminConfigPath = path.join(process.cwd(), '..', 'client-admin', 'public', 'data', 'form-config.json');
-// Đường dẫn đến file cấu hình form từ server
-const serverConfigPath = path.join(process.cwd(), '..', 'server', 'data', 'form-config.json');
+// URL của API server
+const SERVER_API_URL = 'http://localhost:3000/api';
 
-// Cấu hình mặc định nếu không tìm thấy file
-const defaultConfig = {
-  title: 'Đăng ký lên văn phòng',
-  fields: {
-    name: {
-      label: 'Họ và tên',
-      required: true,
-      enabled: true
-    },
-    phone: {
-      label: 'Số điện thoại',
-      required: true,
-      enabled: true
-    },
-    email: {
-      label: 'Email',
-      required: true,
-      enabled: true
-    },
-    school: {
-      label: 'Trường đại học',
-      required: true,
-      enabled: true
-    },
-    studentId: {
-      label: 'Mã số sinh viên',
-      required: true,
-      enabled: true
-    },
-    purpose: {
-      label: 'Chọn mục đích',
-      required: true,
-      enabled: true,
-      options: ['Học tập', 'Tham quan', 'Tư vấn', 'Khác']
-    },
-    floor: {
-      label: 'Chọn tầng',
-      required: true,
-      enabled: true,
-      options: ['Tầng 2', 'Tầng 3', 'Tầng 4', 'Tầng 5']
-    },
-    contact: {
-      label: 'Chọn người liên hệ',
-      required: true,
-      enabled: true,
-      options: ['Anh Thiên', 'Chị Hương', 'Anh Tuấn', 'Chị Linh']
-    },
-    date: {
-      label: 'Ngày đăng ký',
-      required: true,
-      enabled: true
-    },
-    time: {
-      label: 'Giờ đăng ký',
-      required: true,
-      enabled: true
-    }
-  }
+// Tùy chọn cho fetch
+const fetchOptions = {
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  cache: 'no-store' as const,
+  mode: 'cors' as const,
+  credentials: 'include' as const,
 };
+
+// Không còn sử dụng cấu hình mặc định - chỉ lấy dữ liệu từ server
 
 export async function GET() {
   try {
-    // Ưu tiên đọc cấu hình từ server
-    if (fs.existsSync(serverConfigPath)) {
-      console.log('Đọc cấu hình form từ server:', serverConfigPath);
-      const configData = fs.readFileSync(serverConfigPath, 'utf8');
-      const config = JSON.parse(configData);
-      return NextResponse.json(config);
+    // Gọi API từ server để lấy cấu hình form
+    console.log('Gọi API để lấy cấu hình form từ server');
+    const response = await fetch(`${SERVER_API_URL}/form-config`, {
+      method: 'GET',
+      ...fetchOptions
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Server trả về lỗi ${response.status}: ${await response.text()}`);
     }
-    // Nếu không có file cấu hình ở server, thử đọc từ ứng dụng admin
-    else if (fs.existsSync(adminConfigPath)) {
-      console.log('Đọc cấu hình form từ ứng dụng admin:', adminConfigPath);
-      const configData = fs.readFileSync(adminConfigPath, 'utf8');
-      const config = JSON.parse(configData);
-      return NextResponse.json(config);
-    } else {
-      console.log('Không tìm thấy file cấu hình, sử dụng cấu hình mặc định');
-      return NextResponse.json(defaultConfig);
+    
+    // Xử lý dữ liệu trả về từ server
+    const data = await response.json();
+    console.log('Nhận dữ liệu cấu hình form từ server:', data);
+    
+    // Đảm bảo các trường có options là mảng
+    const processedData = {
+      ...data,
+      fields: { ...data.fields }
+    };
+    
+    // Thêm các options từ các mảng options vào các trường tương ứng
+    if (data.floorOptions && Array.isArray(data.floorOptions) && data.fields.floor) {
+      processedData.fields.floor.options = data.floorOptions.map(option => option.value);
     }
+    
+    if (data.departmentOptions && Array.isArray(data.departmentOptions) && data.fields.department) {
+      processedData.fields.department.options = data.departmentOptions.map(option => option.value);
+    }
+    
+    if (data.purposeOptions && Array.isArray(data.purposeOptions) && data.fields.purpose) {
+      processedData.fields.purpose.options = data.purposeOptions.map(option => option.value);
+    }
+    
+    if (data.contactOptions && Array.isArray(data.contactOptions) && data.fields.contact) {
+      processedData.fields.contact.options = data.contactOptions.map(option => option.value);
+    }
+    
+    if (data.schoolOptions && Array.isArray(data.schoolOptions) && data.fields.school) {
+      processedData.fields.school.options = data.schoolOptions.map(option => option.value);
+    }
+    
+    return NextResponse.json(processedData);
   } catch (error) {
-    console.error('Lỗi khi đọc cấu hình form:', error);
+    console.error('Lỗi khi lấy cấu hình form từ server:', error);
     return NextResponse.json(
-      defaultConfig,
-      { status: 200 } // Vẫn trả về 200 với cấu hình mặc định
+      { error: 'Không thể kết nối đến server. Hệ thống đang bảo trì, vui lòng quay lại sau.' },
+      { status: 503 } // Service Unavailable
     );
   }
 }
